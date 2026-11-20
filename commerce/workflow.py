@@ -234,7 +234,13 @@ class Workflow:
                 "evidenceIds": ids,
             }
             if key == "returns":
-                state.update(catalogEvidence=row.item.quote, quantity=1, condition=row.condition)
+                state.update(
+                    catalogEvidence=row.item.quote,
+                    quantity=1,
+                    condition=row.condition,
+                    selectedSize=o.size,
+                    available=o.available,
+                )
             if row.list_minor and comparable and 0 <= o.priceMinor <= row.list_minor:
                 state["discountNumerator"] = 100 * (row.list_minor - o.priceMinor)
                 state["discountDenominator"] = row.list_minor

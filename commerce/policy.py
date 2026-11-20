@@ -10,9 +10,10 @@ from .providers import Evidence, now
 
 
 class PolicyBody(HTMLParser):
-    def __init__(self, hosted=False):
+    def __init__(self, hosted=False, shop_id=None):
         super().__init__()
         self.hosted = hosted
+        self.shop_id = shop_id
         self.container = "body" if hosted else "div"
         self.depth = 0
         self.complete = False
@@ -32,7 +33,7 @@ class PolicyBody(HTMLParser):
             return
         if tag == "a":
             self.anchor = []
-            self.contact = attrs.get("href", "").lower().startswith(("mailto:", "tel:"))
+            self.href = attrs.get("href") or ""
         elif tag in ("iframe", "script", "img"):
             self.referenced = True
         elif self.hosted and tag == "span" and "visually-hidden" in attrs.get("class", "").split():
@@ -48,17 +49,33 @@ class PolicyBody(HTMLParser):
             self.ui_span = False
         if tag == "a" and self.anchor is not None:
             action = " ".join(" ".join(self.anchor).lower().split())
-            if not self.contact and action not in {
-                "return form",
-                "start your return or exchange",
-                "report an issue",
-            }:
+            if not self.is_action_link(action):
                 self.referenced = True
             self.anchor = None
         if self.depth and tag == self.container:
             self.depth -= 1
             if self.depth == 0:
                 self.complete = True
+
+    def is_action_link(self, label):
+        if self.href.lower().startswith(("mailto:", "tel:")) or label in {
+            "return form",
+            "start your return or exchange",
+            "report an issue",
+        }:
+            return True
+        # Hosted policies can link to the buyer's Shopify account to start a return.
+        # A separate policy/exclusions page still makes the extracted terms incomplete.
+        link = urlsplit(self.href)
+        return (
+            self.shop_id is not None
+            and self.shop_id.isdecimal()
+            and link.scheme == "https"
+            and link.netloc == "shopify.com"
+            and link.path.rstrip("/") == f"/{self.shop_id}/account"
+            and re.fullmatch(r"(?:online )?return form(?:\s*\(orders?\s*(?:->|→)\s*returns?\))?", label)
+            is not None
+        )
 
     def handle_data(self, text):
         if self.depth and not self.ui_span and text.strip():
@@ -87,7 +104,10 @@ def terms(row):
                 content.extend(chunk)
                 if len(content) > 800000:
                     return unavailable("The official policy exceeded the reading limit.")
-        parser = PolicyBody(hosted=urlsplit(url).hostname == "checkout.shopify.com")
+        parser = PolicyBody(
+            hosted=urlsplit(url).hostname == "checkout.shopify.com",
+            shop_id=row.offer.sellerId.rsplit("/", 1)[-1],
+        )
         parser.feed(content.decode("utf-8"))
         parser.close()
     except (httpx.HTTPError, UnicodeError, ValueError):
@@ -101,7 +121,7 @@ def terms(row):
         )
     market = row.offer.market
     markers = {
-        "US": r"United States|U\.S\.?|US|USA",
+        "US": r"United States|U\.S\.?|(?-i:US)|USA",
         "CA": r"Canada",
         "GB": r"United Kingdom",
         "JP": r"Japan",
@@ -114,24 +134,47 @@ def terms(row):
         rf"|\b(?:{country})\s+(?:orders?|purchases?|customers?|returns?)\b"
         r"|\ball (?:orders|purchases|items|products) (?:shipped |delivered )?worldwide\b"
     )
-    if not re.search(market_scope, quote, re.IGNORECASE):
-        return unavailable(
-            f"The official policy does not explicitly establish coverage for orders delivered to {market}."
-        )
-    specific = row.offer.name.casefold() in quote.casefold()
-    if not specific and not re.search(
-        r"\ball (items|orders|products|purchases|(?:unworn and unaltered )?clothing)\b",
+    # A direct grant to the buyer in the seller's official policy can apply storewide.
+    # Jev must still establish that the exact current purchase satisfies every condition.
+    buyer_grant = re.search(
+        r"\byou (?:may|can) return your (?:purchase|order|items?|products?)\b",
         quote,
         re.IGNORECASE,
+    )
+    regional_terms = re.search(
+        r"\b(?:domestic|international(?:ly)?|territor(?:y|ies)|residents? of)\b"
+        r"|\b(?:orders?|purchases?|returns?|deliveries|shipments?|customers?)\s+"
+        r"(?:(?:placed|shipped|delivered)\s+)?(?:within|outside|in|from|to)\s+(?!\d|a week|a month)"
+        r"|\b(?:orders?|customers?|addresses|deliveries|countries|regions?) only\b"
+        r"|\b(?:valid|available|applicable|applies)(?: only)? (?:in|within|outside)\b"
+        r"|\bonly (?:in|within|from|available to)\b",
+        quote,
+        re.IGNORECASE,
+    )
+    if not re.search(market_scope, quote, re.IGNORECASE) and (not buyer_grant or regional_terms):
+        if re.search(r"\b(?:exchange|store credit)[- ]only\b", quote, re.IGNORECASE):
+            return unavailable(
+                f"The policy describes exchange-only or credit-only terms. Eligibility for a return on this {market} purchase is unverified."
+            )
+        return unavailable(
+            f"The official terms do not establish a return policy covering the {market} purchase."
+        )
+    specific = row.offer.name.casefold() in quote.casefold()
+    if not (
+        specific
+        or buyer_grant
+        or re.search(
+            r"\b(?:all|any) (?:our )?(?:items|orders|products|purchases|(?:unworn and unaltered )?clothing)\b",
+            quote,
+            re.IGNORECASE,
+        )
     ):
         return unavailable(
-            "The policy does not establish coverage for this jacket or all applicable items."
+            "The policy does not establish coverage for this jacket or a storewide purchase."
         )
-    # Effective windows and item exceptions need explicit verification beyond this narrow reader.
-    if re.search(r"effective|until|except|selected|certain|exclud|\b20\d{2}\b", quote, re.IGNORECASE):
-        return unavailable(
-            "The policy contains dates or exceptions whose applicability needs verification."
-        )
+    # Keep unresolved effective windows on hold. Ordinary exceptions belong in the evidence.
+    if re.search(r"effective|until|\b20\d{2}\b", quote, re.IGNORECASE):
+        return unavailable("The policy has a date or validity window that needs verification.")
     markdown_unknown = (
         row.list_minor is None or row.offer.priceMinor is None or row.list_minor < row.offer.priceMinor
     )

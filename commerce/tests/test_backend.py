@@ -395,7 +395,11 @@ class Backend(unittest.TestCase):
             self.assertEqual([r.get("id") for r in calls], [None, group, variant["id"]])
             self.turn("source_jackets")
             self.assertEqual(calls[3]["pagination"]["cursor"], "next")
-            grant = '<body class="page-policies">All items shipped to the United States can be returned within 30 days.</body>'
+            grant = (
+                '<body class="page-policies">Any items purchased within the US can be returned within 30 days. '
+                "A restocking fee applies except on defective goods. "
+                '<a href="https://shopify.com/7/account">Online Return Form (Orders → Return)</a></body>'
+            )
 
             def policy_response(*args, **kwargs):
                 return nullcontext(
@@ -410,7 +414,18 @@ class Backend(unittest.TestCase):
                 fresh = self.start("live", trip=self.view["tripId"])
                 self.assertEqual(fresh["memory"]["state"], "ready")
                 self.assertTrue(fresh["shortlist"]["winnerId"])
+                check = next(
+                    c for c in fresh["shortlist"]["offers"][0]["checks"] if c["id"] == "returns"
+                )
+                source = next(d for d in fresh["evidence"] if d["kind"] == "merchant_policy")
+                self.assertIn(source["id"], check["evidenceIds"])
+                self.assertIn("restocking fee applies except", source["quote"])
                 self.assertEqual(self.handoff()["url"], url)
+                grant = grant.replace("can be returned", "are final sale").replace(
+                    "Online Return Form", "Additional return exclusions"
+                )
+                held = self.handoff()
+                self.assertEqual((held["status"], held["url"]), ("unavailable", None))
         self.assertTrue(official_policy(shop_policy, seller))
         self.assertFalse(official_policy(shop_policy.replace("/7/", "/8/"), seller))
         for bad in [
@@ -424,22 +439,38 @@ class Backend(unittest.TestCase):
 
     def test_hosted_policy_requires_market_scope_and_complete_terms(self):
         row = SampleCatalog().search(None)[0]
+        row.offer.sellerId = "gid://shopify/Shop/7"
         row.policy_url = "https://checkout.shopify.com/7/policies/12.html"
         grant = "All items shipped to the United States can be returned within 30 days."
-        form = '<a href="/returns">Return form</a>'
+        domestic = "Any items purchased within the US are eligible for a return, refund or exchange. A 20% restocking fee applies."
+        buyer_grant = "You may return your purchase within 30 days. Customized jackets and orders for multiple products are excluded."
+        portal = '<a href="https://shopify.com/7/account">Online Return Form (Orders &rarr; Return)</a>'
         for body, applicable in [
-            (grant + form, True),
+            (grant + '<a href="/returns">Return form</a>', True),
+            (domestic + portal, True),
+            (buyer_grant, True),
             ("All items can be returned. Our address is in the United States.", False),
+            (domestic + portal.replace("/7/account", "/8/account"), False),
+            (buyer_grant + " This policy only applies to orders delivered to Canada.", False),
+            ("Canadian orders only. " + buyer_grant, False),
+            ("This policy applies in Canada only. " + buyer_grant, False),
+            ("Domestic returns only. " + buyer_grant, False),
+            ("Return address: United States. Contact the store for eligibility.", False),
+            ("Canadian orders only. Send all items to us with a receipt.", False),
             (grant + '<a href="/sale">Sale exclusions</a>', False),
+            (grant + '<a href="/sale">Return form and sale exclusions</a>', False),
+            (grant + " The policy is valid until December 2024.", False),
+            (grant + " Discounted items are non-returnable.", False),
         ]:
-            html = '<body class="page-policies">' + body + "</body>"
-            response = httpx.Response(200, text=html, headers={"content-type": "text/html"})
-            with patch("commerce.policy.httpx.stream", return_value=nullcontext(response)):
-                doc = terms(row)
-            self.assertEqual(doc is not None, applicable)
-            if doc:
-                self.assertIn(grant, doc.quote)
-                self.assertEqual(doc.variantId, row.offer.variantId)
+            with self.subTest(body=body):
+                html = '<body class="page-policies">' + body + "</body>"
+                response = httpx.Response(200, text=html, headers={"content-type": "text/html"})
+                with patch("commerce.policy.httpx.stream", return_value=nullcontext(response)):
+                    doc = terms(row)
+                self.assertEqual(doc is not None, applicable)
+                if doc:
+                    self.assertIn(body.split("<")[0], doc.quote)
+                    self.assertEqual(doc.variantId, row.offer.variantId)
 
     def test_t07_handoff(self):
         self.board()
