@@ -98,14 +98,15 @@ function notice(text = "", retry = null) {
 function updateControls() {
   for (const id of ["start", "mode"]) get(id).disabled = busy;
   get("reopen").hidden = !view;
-  get("reopen").disabled = busy;
-  get("send").disabled = busy || !view;
-  get("source").disabled = busy || !view?.brief;
-  get("refresh").disabled = busy || !view;
-  get("save").disabled = busy || !view || view.memory.state !== "none";
+  const active = !!view && !busy && mode.value === view.mode;
+  get("reopen").disabled = !active;
+  get("send").disabled = !active;
+  get("source").disabled = !active || !view.brief?.needs.some(need => /^jackets?$/i.test(need.category));
+  get("refresh").disabled = !active;
+  get("save").disabled = !active || view.memory.state !== "none";
   const held = ["indexing", "unavailable"].includes(view?.memory.state);
-  get("checkout").disabled = busy || stale || held || !selection || view?.shortlist?.winnerId !== selection;
-  for (const radio of document.querySelectorAll('input[name="offer"]')) radio.disabled = busy;
+  get("checkout").disabled = !active || stale || held || !selection || view.shortlist?.winnerId !== selection;
+  for (const radio of document.querySelectorAll('input[name="offer"]')) radio.disabled = !active;
 }
 
 function renderBrief() {
@@ -146,12 +147,12 @@ function renderMemory() {
   if (memory.ruleText) container.append(element("p", memory.ruleText));
   if (memory.evidenceId) {
     const source = element("button", "View saved rule evidence", "text-button");
-    source.addEventListener("click", () => showEvidence("Saved preference", "", [memory.evidenceId]));
+    source.addEventListener("click", () => showEvidence("Saved preference", "", [memory.evidenceId], source));
     container.append(source);
   }
 }
 
-function showEvidence(title, reason, ids) {
+function showEvidence(title, reason, ids, trigger) {
   const container = get("evidence");
   container.replaceChildren(element("h3", title));
   if (reason) container.append(element("p", reason, "quiet"));
@@ -165,9 +166,7 @@ function showEvidence(title, reason, ids) {
     const details = element("p", (originLabel[record.origin] || record.origin) + " · ", "quiet");
     details.append(time);
     article.append(element("h3", record.title), details, element("blockquote", record.quote));
-    if (record.market || record.speaker) {
-      article.append(facts([["Market", record.market], ["Speaker", record.speaker]]));
-    }
+    article.append(facts([["Market", record.market], ["Seller ID", record.sellerId], ["Variant ID", record.variantId], ["Speaker", record.speaker]]));
     if (https(record.sourceUrl)) article.append(externalLink("Open source", record.sourceUrl));
     if (record.senso) {
       const refs = element("details");
@@ -179,6 +178,9 @@ function showEvidence(title, reason, ids) {
     }
     container.append(article);
   }
+  const back = element("button", "Back to selection", "text-button");
+  back.addEventListener("click", () => trigger.focus());
+  container.append(back);
   get("evidence-title").focus();
 }
 
@@ -205,6 +207,7 @@ function card(offer, winner) {
   radio.addEventListener("change", () => {
     selection = offer.id;
     clearCheckout();
+    if (stale) notice("The displayed trip may be out of date. Refresh before checkout.");
     for (const item of document.querySelectorAll("[data-offer]")) {
       item.dataset.selected = String(item.dataset.offer === selection);
     }
@@ -220,13 +223,16 @@ function card(offer, winner) {
     element("p", "Size " + (offer.size ?? "unknown") + " · " + stock, "quiet"),
     select,
   );
+  const identity = element("details");
+  identity.append(element("summary", "Variant details"), facts([["Seller ID", offer.sellerId], ["Variant ID", offer.variantId], ["Market", offer.market]]));
+  body.append(identity);
   const checks = element("ul", undefined, "checks");
   for (const check of offer.checks) {
     const item = element("li");
     const button = element("button");
     button.type = "button";
     button.append(element("span", check.label), badge(verdictLabel[check.verdict], check.verdict));
-    button.addEventListener("click", () => showEvidence(offer.seller + " · " + check.label, check.reason, check.evidenceIds));
+    button.addEventListener("click", () => showEvidence(offer.seller + " · " + check.label, check.reason, check.evidenceIds, button));
     item.append(button);
     checks.append(item);
   }
@@ -298,6 +304,10 @@ async function run(path, payload, type) {
   const token = ++generation;
   const starting = type === "session";
   const sid = view?.sessionId;
+  const requested = type === "handoff"
+    ? view?.shortlist?.offers.find(offer => offer.id === selection && offer.id === payload.offerId)
+    : null;
+  if (type === "handoff" && (!requested || payload.shortlistId !== view.shortlist.id || mode.value !== view.mode)) return;
   busy = true;
   clearCheckout();
   notice(starting ? "Opening conversation…" : "Updating trip…");
@@ -333,6 +343,8 @@ async function run(path, payload, type) {
       const offer = next.shortlist?.offers.find(item => item.id === payload.offerId);
       if (data.status === "ready" && next.mode === "live" && next.shortlist?.id === payload.shortlistId &&
           next.shortlist.winnerId === payload.offerId && offer?.origin === "shopify_live" && offer.outcome === "meets" &&
+          offer.sellerId === requested.sellerId && offer.variantId === requested.variantId &&
+          offer.priceMinor === requested.priceMinor && offer.currency === requested.currency &&
           !["indexing", "unavailable"].includes(next.memory.state) && https(data.url)) {
         const link = externalLink("Open merchant checkout", data.url);
         link.className = "merchant-link";
@@ -368,7 +380,15 @@ get("session-form").addEventListener("submit", event => {
   event.preventDefault();
   run("/api/sessions", { tripId: null, mode: mode.value }, "session");
 });
-mode.addEventListener("change", clearCheckout);
+mode.addEventListener("change", () => {
+  clearCheckout();
+  if (!view) notice("Choose Start trip to use the selected mode.");
+  else {
+    notice(mode.value !== view.mode ? "Choose Start trip to use the selected mode." :
+      stale ? "The displayed trip may be out of date. Refresh before checkout." : "");
+  }
+  updateControls();
+});
 get("reopen").addEventListener("click", () => run("/api/sessions", { tripId: view.tripId, mode: view.mode }, "session"));
 get("example").addEventListener("click", () => {
   if (!draft.value || draft.value === sampleBrief || window.confirm("Replace your draft with the sample wording?")) {
