@@ -134,7 +134,19 @@ function renderBrief() {
   }
   for (const city of brief.cities) {
     const section = element("section", undefined, "trip-city");
-    section.append(element("h3", city.name), list(city.events.map(event => event.name + " · " + event.dress)));
+    const destinations = {
+      delhi: ["🇮🇳", "India"], istanbul: ["🇹🇷", "Türkiye"], barcelona: ["🇪🇸", "Spain"],
+    };
+    const destination = destinations[city.name.trim().toLowerCase()];
+    const heading = element("h3");
+    if (destination) {
+      const flag = element("span", destination[0] + " ");
+      flag.setAttribute("role", "img");
+      flag.setAttribute("aria-label", destination[1] + " flag");
+      heading.append(flag);
+    }
+    heading.append(document.createTextNode(city.name));
+    section.append(heading, list(city.events.map(event => event.name + " · " + event.dress)));
     container.append(section);
   }
 }

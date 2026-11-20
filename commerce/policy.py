@@ -68,27 +68,37 @@ class PolicyBody(HTMLParser):
 
 
 def terms(row):
+    def unavailable(reason):
+        row.policy_note = reason
+
+    row.policy_note = None
     url = row.policy_url
     if not url:
-        return None
+        return unavailable("Shopify did not provide an official return-policy link for this seller.")
     # Only the official refund-policy URL from the exact seller lookup reaches this function.
     try:
         with httpx.stream("GET", url, timeout=4, follow_redirects=False) as response:
             if response.status_code != 200 or "html" not in response.headers.get("content-type", ""):
-                return None
+                return unavailable(
+                    f"The official policy could not be read as HTML (HTTP {response.status_code})."
+                )
             content = bytearray()
             for chunk in response.iter_bytes():
                 content.extend(chunk)
                 if len(content) > 800000:
-                    return None
+                    return unavailable("The official policy exceeded the reading limit.")
         parser = PolicyBody(hosted=urlsplit(url).hostname == "checkout.shopify.com")
         parser.feed(content.decode("utf-8"))
         parser.close()
     except (httpx.HTTPError, UnicodeError, ValueError):
-        return None
+        return unavailable("The official return policy could not be retrieved.")
     quote = " ".join(parser.parts)
-    if not parser.complete or parser.referenced or not 0 < len(quote) <= 10000:
-        return None
+    if not parser.complete or not 0 < len(quote) <= 10000:
+        return unavailable("The complete official return-policy text could not be extracted.")
+    if parser.referenced:
+        return unavailable(
+            "The policy references additional material whose exceptions need verification."
+        )
     market = row.offer.market
     markers = {
         "US": r"United States|U\.S\.?|US|USA",
@@ -105,24 +115,32 @@ def terms(row):
         r"|\ball (?:orders|purchases|items|products) (?:shipped |delivered )?worldwide\b"
     )
     if not re.search(market_scope, quote, re.IGNORECASE):
-        return None
+        return unavailable(
+            f"The official policy does not explicitly establish coverage for orders delivered to {market}."
+        )
     specific = row.offer.name.casefold() in quote.casefold()
     if not specific and not re.search(
         r"\ball (items|orders|products|purchases|(?:unworn and unaltered )?clothing)\b",
         quote,
         re.IGNORECASE,
     ):
-        return None
+        return unavailable(
+            "The policy does not establish coverage for this jacket or all applicable items."
+        )
     # Effective windows and item exceptions need explicit verification beyond this narrow reader.
     if re.search(r"effective|until|except|selected|certain|exclud|\b20\d{2}\b", quote, re.IGNORECASE):
-        return None
+        return unavailable(
+            "The policy contains dates or exceptions whose applicability needs verification."
+        )
     markdown_unknown = (
         row.list_minor is None or row.offer.priceMinor is None or row.list_minor < row.offer.priceMinor
     )
     if markdown_unknown and re.search(
         r"discount|markdown|sale price|sale items|% off", quote, re.IGNORECASE
     ):
-        return None
+        return unavailable(
+            "The policy has sale restrictions, and this variant’s markdown status is unverified."
+        )
     return Evidence(
         id="terms-" + row.offer.id,
         kind="merchant_policy",

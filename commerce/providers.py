@@ -49,6 +49,7 @@ class Listing:
     policy: Evidence | None = None
     policy_url: str | None = None
     list_minor: int | None = None
+    policy_note: str | None = None
 
     def comparison_facts(self):
         # Exclude presentation, observation time and rotating attribution tokens.

@@ -304,7 +304,8 @@ class Workflow:
                     None,
                     "Waiting for verified recall of the saved rule."
                     if not rule
-                    else "The official terms do not establish returnability for this variant, market and price.",
+                    else row.policy_note
+                    or "The official terms do not establish returnability for this variant, market and price.",
                     [],
                 )
         o.checks = checks
