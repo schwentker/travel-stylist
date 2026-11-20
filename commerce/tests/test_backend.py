@@ -66,7 +66,7 @@ class Backend(unittest.TestCase):
         self.turn("message", BRIEF)
         return self.turn("source_jackets")["shortlist"]
 
-    def handoff(self, offer=None, shortlist=None, rid=None, status=200):
+    def handoff(self, offer=None, shortlist=None, rid=None, status=200, override=None):
         board = self.view["shortlist"]
         r = self.c.post(
             "/api/sessions/" + self.view["sessionId"] + "/handoff",
@@ -74,6 +74,7 @@ class Backend(unittest.TestCase):
                 "shortlistId": shortlist or board["id"],
                 "offerId": offer or board["winnerId"],
                 "requestId": rid or str(uuid4()),
+                **({"override": override} if override is not None else {}),
             },
         )
         self.assertEqual(r.status_code, status, r.text)
@@ -490,6 +491,37 @@ class Backend(unittest.TestCase):
         self.handoff("unknown", status=404)
         self.service.sets[self.view["tripId"]].expires = 0
         self.assertEqual(self.handoff("offer-b", status=409)["error"]["code"], "STALE_SHORTLIST")
+
+    def test_checkout_override_is_explicit_and_bound_to_the_revalidated_offer(self):
+        target = self.live()
+        target.item.quote = "A navy jacket with brass buttons."
+        board = self.turn("source_jackets")["shortlist"]
+        self.assertIsNone(board["winnerId"])
+        snapshot = {
+            "priceMinor": target.offer.priceMinor,
+            "currency": "USD",
+            "checks": {"formality": "unknown"},
+        }
+        offer = target.offer.id
+        self.assertEqual(self.handoff(offer)["status"], "unavailable")
+        with patch.dict("os.environ", {"SENSO_API_KEY": ""}):
+            self.turn("save_rule", RULE)
+            self.assertEqual(self.handoff(offer, override=snapshot)["status"], "changed")
+            snapshot["checks"]["returns"] = "unknown"
+            result = self.handoff(offer, override=snapshot)
+            self.assertEqual(
+                (result["status"], result["offerId"], result["url"]),
+                ("override_ready", offer, target.checkout),
+            )
+            self.assertIsNone(result["view"]["shortlist"]["winnerId"])
+            self.assertEqual(result["view"]["shortlist"]["offers"][0]["outcome"], "unknown")
+            target.offer.priceMinor += 100
+            result = self.handoff(offer, override=snapshot)
+            self.assertEqual((result["status"], result["url"]), ("changed", None))
+            snapshot["priceMinor"] += 100
+            target.offer.available = False
+            result = self.handoff(offer, override=snapshot)
+            self.assertEqual((result["status"], result["url"]), ("unavailable", None))
 
     def test_t08_price_and_provider_failures(self):
         self.board()

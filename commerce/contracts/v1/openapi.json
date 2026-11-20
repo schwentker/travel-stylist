@@ -188,6 +188,9 @@
                       "$ref": "#/components/schemas/Ready"
                     },
                     {
+                      "$ref": "#/components/schemas/OverrideReady"
+                    },
+                    {
                       "$ref": "#/components/schemas/Held"
                     }
                   ],
@@ -195,6 +198,7 @@
                     "propertyName": "status",
                     "mapping": {
                       "ready": "#/components/schemas/Ready",
+                      "override_ready": "#/components/schemas/OverrideReady",
                       "changed": "#/components/schemas/Held",
                       "unavailable": "#/components/schemas/Held",
                       "sample": "#/components/schemas/Held"
@@ -580,6 +584,16 @@
             "type": "string",
             "minLength": 1,
             "title": "Offerid"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OverrideApproval"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -818,6 +832,79 @@
           "checks"
         ],
         "title": "Offer"
+      },
+      "OverrideApproval": {
+        "properties": {
+          "priceMinor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Priceminor"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Currency"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "fails",
+                "unknown"
+              ]
+            },
+            "propertyNames": {
+              "minLength": 1
+            },
+            "type": "object",
+            "minProperties": 1,
+            "title": "Checks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "priceMinor",
+          "currency",
+          "checks"
+        ],
+        "title": "OverrideApproval"
+      },
+      "OverrideReady": {
+        "properties": {
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "view": {
+            "$ref": "#/components/schemas/View"
+          },
+          "status": {
+            "type": "string",
+            "const": "override_ready",
+            "title": "Status"
+          },
+          "offerId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Offerid"
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://[^\\s/?#]+(?:[/?#][^\\s]*)?$",
+            "title": "Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note",
+          "view",
+          "status",
+          "offerId",
+          "url"
+        ],
+        "title": "OverrideReady"
       },
       "Providers": {
         "properties": {

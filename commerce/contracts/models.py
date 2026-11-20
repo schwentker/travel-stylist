@@ -30,10 +30,17 @@ class TurnRequest(WireModel):
     text: str
 
 
+class OverrideApproval(WireModel):
+    priceMinor: Minor
+    currency: Identifier
+    checks: Annotated[dict[Identifier, Literal["fails", "unknown"]], Field(min_length=1)]
+
+
 class HandoffRequest(WireModel):
     requestId: RequestId
     shortlistId: Identifier
     offerId: Identifier
+    override: OverrideApproval | None = None
 
 
 class ErrorDetail(WireModel):
@@ -186,9 +193,35 @@ class Ready(HandoffBase):
         return self
 
 
+def may_override(offer):
+    return (
+        offer.origin == "shopify_live"
+        and offer.available is True
+        and offer.priceMinor is not None
+        and bool(offer.currency)
+        and any(check.id == "checkout" and check.verdict == "meets" for check in offer.checks)
+    )
+
+
+class OverrideReady(HandoffBase):
+    status: Literal["override_ready"]
+    offerId: Identifier
+    url: Annotated[str, Field(pattern=r"^https://[^\s/?#]+(?:[/?#][^\s]*)?$")]
+
+    @model_validator(mode="after")
+    def selected_live_offer(self):
+        board = self.view.shortlist
+        if self.view.mode != "live" or not board or not any(
+            offer.id == self.offerId and offer.outcome != "meets" and may_override(offer)
+            for offer in board.offers
+        ):
+            raise ValueError("An override requires a verified selection with unmet checks.")
+        return self
+
+
 class Held(HandoffBase):
     status: Literal["changed", "unavailable", "sample"]
     url: None
 
 
-HandoffResponse = Annotated[Ready | Held, Field(discriminator="status")]
+HandoffResponse = Annotated[Ready | OverrideReady | Held, Field(discriminator="status")]

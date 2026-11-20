@@ -58,7 +58,20 @@
           <div class="checkout">
             <div id="checkout-note" role="status" hidden></div>
             <button id="checkout" class="primary" type="button" disabled>Check checkout</button>
+            <button id="review-override" type="button" hidden>Review checkout override</button>
             <div id="merchant"></div>
+            <dialog id="override-dialog" aria-labelledby="override-title" aria-describedby="override-quote">
+              <form method="dialog">
+                <h3 id="override-title">Continue with this jacket?</h3>
+                <p id="override-quote"></p>
+                <p id="override-rule" hidden></p>
+                <ul id="override-checks"></ul>
+                <div class="dialog-actions">
+                  <button value="cancel" autofocus>Cancel</button>
+                  <button value="approve" class="primary">Accept checks and verify checkout</button>
+                </div>
+              </form>
+            </dialog>
           </div>
           <button id="refresh" class="text-button" type="button" disabled>Refresh trip</button>
         </section>
