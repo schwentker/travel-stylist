@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Travel Stylist</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="wordmark" href="/">Travel Stylist</a>
+    <form id="session-form" class="session-bar">
+      <label for="mode">Mode</label>
+      <select id="mode"><option value="sample">Sample</option><option value="live">Live</option></select>
+      <button id="start" type="submit">Start trip</button>
+    </form>
+  </header>
+  <main>
+    <div class="intro">
+      <div>
+        <h1>Dress for the trip.</h1>
+        <p>Plan your wardrobe, then compare formal jackets for your itinerary.</p>
+      </div>
+      <button id="reopen" type="button" hidden>New conversation for this trip</button>
+    </div>
+    <div class="notice" id="notice" role="status" aria-live="polite">Choose a mode and select Start trip to send your brief.</div>
+    <div class="workspace">
+      <aside class="panel brief-panel" aria-labelledby="brief-title">
+        <div class="panel-heading"><h2 id="brief-title">Trip brief</h2><span id="active-mode" class="badge" hidden></span></div>
+        <div id="brief"><p class="quiet">Your itinerary and shopping list will appear here.</p></div>
+        <section class="preference" aria-labelledby="preference-title">
+          <h3 id="preference-title">Buying preference</h3>
+          <div id="memory"><p class="quiet">No preference saved.</p></div>
+          <button id="save" type="button" disabled>Save “No final-sale items”</button>
+        </section>
+      </aside>
+      <div class="center">
+        <section class="panel conversation" aria-labelledby="conversation-title">
+          <div class="panel-heading"><h2 id="conversation-title">Conversation</h2></div>
+          <ol id="transcript" class="transcript" aria-live="polite" aria-label="Conversation messages"></ol>
+          <form id="message-form">
+            <div class="composer-heading">
+              <label for="draft">Trip details or a question</label>
+              <button class="text-button" type="button" id="example">Use sample wording</button>
+            </div>
+            <textarea id="draft" rows="3" required placeholder="Where are you going, and what do you need?"></textarea>
+            <div class="composer-actions"><button type="submit" class="primary" id="send" disabled>Send message</button></div>
+          </form>
+        </section>
+        <section class="panel candidates" aria-labelledby="candidate-title">
+          <div class="panel-heading candidate-heading">
+            <div><h2 id="candidate-title">Formal jackets</h2><p id="candidate-summary" class="quiet">One jacket, compared across sellers.</p></div>
+            <button id="source" type="button" disabled>Source jackets</button>
+          </div>
+          <div id="shortlist"></div>
+          <div class="checkout">
+            <div id="checkout-note" role="status" hidden></div>
+            <button id="checkout" class="primary" type="button" disabled>Check checkout</button>
+            <div id="merchant"></div>
+          </div>
+          <button id="refresh" class="text-button" type="button" disabled>Refresh trip</button>
+        </section>
+      </div>
+      <aside class="panel evidence-panel" aria-labelledby="evidence-title">
+        <div class="panel-heading"><h2 id="evidence-title" tabindex="-1">Evidence</h2></div>
+        <div id="evidence"><p class="quiet">Select a jacket check to see its reason and source.</p></div>
+        <section class="providers" id="providers" hidden>
+          <h3>Service status</h3>
+          <dl id="provider-list"></dl>
+        </section>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

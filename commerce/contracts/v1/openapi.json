@@ -1,0 +1,1204 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Travel Stylist foundation",
+    "version": "1"
+  },
+  "paths": {
+    "/api/sessions": {
+      "post": {
+        "summary": "Start Session",
+        "operationId": "start_session_api_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/View"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/turns": {
+      "post": {
+        "summary": "Turn",
+        "operationId": "turn_api_sessions__sessionId__turns_post",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sessionid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TurnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/View"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/handoff": {
+      "post": {
+        "summary": "Handoff",
+        "operationId": "handoff_api_sessions__sessionId__handoff_post",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sessionid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoffRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Ready"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Held"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "status",
+                    "mapping": {
+                      "ready": "#/components/schemas/Ready",
+                      "changed": "#/components/schemas/Held",
+                      "unavailable": "#/components/schemas/Held",
+                      "sample": "#/components/schemas/Held"
+                    }
+                  },
+                  "title": "Response Handoff Api Sessions  Sessionid  Handoff Post"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ApiError"
+      },
+      "Brief": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "market": {
+            "type": "string",
+            "title": "Market"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "jacketSize": {
+            "type": "string",
+            "title": "Jacketsize"
+          },
+          "jacketCapMinor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Jacketcapminor"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assumptions"
+          },
+          "cities": {
+            "items": {
+              "$ref": "#/components/schemas/City"
+            },
+            "type": "array",
+            "title": "Cities"
+          },
+          "needs": {
+            "items": {
+              "$ref": "#/components/schemas/Need"
+            },
+            "type": "array",
+            "title": "Needs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "month",
+          "market",
+          "currency",
+          "jacketSize",
+          "jacketCapMinor",
+          "assumptions",
+          "cities",
+          "needs"
+        ],
+        "title": "Brief"
+      },
+      "Check": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "meets",
+              "fails",
+              "unknown"
+            ],
+            "title": "Verdict"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "evidenceIds": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "title": "Evidenceids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "verdict",
+          "reason",
+          "evidenceIds"
+        ],
+        "title": "Check"
+      },
+      "City": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "events"
+        ],
+        "title": "City"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail"
+      },
+      "Event": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "dress": {
+            "type": "string",
+            "enum": [
+              "formal",
+              "informal"
+            ],
+            "title": "Dress"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "dress"
+        ],
+        "title": "Event"
+      },
+      "Evidence": {
+        "properties": {
+          "observedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$",
+            "format": "date-time",
+            "title": "Observedat"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "buyer_brief",
+              "buyer_rule",
+              "catalog_variant",
+              "merchant_policy",
+              "merchant_reply",
+              "sample_policy"
+            ],
+            "title": "Kind"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "buyer",
+              "merchant",
+              "shopify_live",
+              "sample"
+            ],
+            "title": "Origin"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "agent",
+                  "human"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "sourceUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourceurl"
+          },
+          "sellerId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sellerid"
+          },
+          "variantId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variantid"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market"
+          },
+          "senso": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SensoRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observedAt",
+          "id",
+          "kind",
+          "origin",
+          "speaker",
+          "title",
+          "quote",
+          "sourceUrl",
+          "sellerId",
+          "variantId",
+          "market",
+          "senso"
+        ],
+        "title": "Evidence"
+      },
+      "HandoffRequest": {
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$",
+            "title": "Requestid"
+          },
+          "shortlistId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Shortlistid"
+          },
+          "offerId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Offerid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requestId",
+          "shortlistId",
+          "offerId"
+        ],
+        "title": "HandoffRequest"
+      },
+      "Held": {
+        "properties": {
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "view": {
+            "$ref": "#/components/schemas/View"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "changed",
+              "unavailable",
+              "sample"
+            ],
+            "title": "Status"
+          },
+          "url": {
+            "type": "null",
+            "title": "Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note",
+          "view",
+          "status",
+          "url"
+        ],
+        "title": "Held"
+      },
+      "Memory": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "indexing",
+              "ready",
+              "unavailable"
+            ],
+            "title": "State"
+          },
+          "ruleText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruletext"
+          },
+          "evidenceId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidenceid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state",
+          "ruleText",
+          "evidenceId"
+        ],
+        "title": "Memory"
+      },
+      "Need": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "category",
+          "quantity"
+        ],
+        "title": "Need"
+      },
+      "Offer": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "sellerId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sellerid"
+          },
+          "seller": {
+            "type": "string",
+            "title": "Seller"
+          },
+          "variantId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Variantid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "imageUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imageurl"
+          },
+          "market": {
+            "type": "string",
+            "title": "Market"
+          },
+          "available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available"
+          },
+          "priceMinor": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priceminor"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "shopify_live",
+              "sample"
+            ],
+            "title": "Origin"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "meets",
+              "fails",
+              "unknown"
+            ],
+            "title": "Outcome"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/Check"
+            },
+            "type": "array",
+            "title": "Checks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "sellerId",
+          "seller",
+          "variantId",
+          "name",
+          "size",
+          "imageUrl",
+          "market",
+          "available",
+          "priceMinor",
+          "currency",
+          "origin",
+          "outcome",
+          "checks"
+        ],
+        "title": "Offer"
+      },
+      "Providers": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "enum": [
+              "live",
+              "sample",
+              "unavailable",
+              "unused",
+              "guided"
+            ],
+            "title": "Catalog"
+          },
+          "senso": {
+            "type": "string",
+            "enum": [
+              "live",
+              "sample",
+              "unavailable",
+              "unused",
+              "guided"
+            ],
+            "title": "Senso"
+          },
+          "jev": {
+            "type": "string",
+            "enum": [
+              "live",
+              "sample",
+              "unavailable",
+              "unused",
+              "guided"
+            ],
+            "title": "Jev"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "live",
+              "sample",
+              "unavailable",
+              "unused",
+              "guided"
+            ],
+            "title": "Language"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "catalog",
+          "senso",
+          "jev",
+          "language"
+        ],
+        "title": "Providers"
+      },
+      "Ready": {
+        "properties": {
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "view": {
+            "$ref": "#/components/schemas/View"
+          },
+          "status": {
+            "type": "string",
+            "const": "ready",
+            "title": "Status"
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://[^\\s/?#]+(?:[/?#][^\\s]*)?$",
+            "title": "Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note",
+          "view",
+          "status",
+          "url"
+        ],
+        "title": "Ready"
+      },
+      "SensoRef": {
+        "properties": {
+          "contentId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Contentid"
+          },
+          "kbNodeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kbnodeid"
+          },
+          "versionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versionid"
+          },
+          "chunkId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunkid"
+          },
+          "chunkIndex": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunkindex"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contentId",
+          "kbNodeId",
+          "versionId",
+          "chunkId",
+          "chunkIndex"
+        ],
+        "title": "SensoRef"
+      },
+      "SessionRequest": {
+        "properties": {
+          "tripId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tripid"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "sample"
+            ],
+            "title": "Mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tripId",
+          "mode"
+        ],
+        "title": "SessionRequest"
+      },
+      "Shortlist": {
+        "properties": {
+          "observedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$",
+            "format": "date-time",
+            "title": "Observedat"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "slot": {
+            "type": "string",
+            "const": "formal_jacket",
+            "title": "Slot"
+          },
+          "continuity": {
+            "type": "string",
+            "enum": [
+              "first",
+              "same_set",
+              "new_search"
+            ],
+            "title": "Continuity"
+          },
+          "previousWinnerId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previouswinnerid"
+          },
+          "winnerId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winnerid"
+          },
+          "changeNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changenote"
+          },
+          "offers": {
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Offers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observedAt",
+          "id",
+          "slot",
+          "continuity",
+          "previousWinnerId",
+          "winnerId",
+          "changeNote",
+          "offers"
+        ],
+        "title": "Shortlist"
+      },
+      "TurnRequest": {
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$",
+            "title": "Requestid"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "message",
+              "source_jackets",
+              "save_rule",
+              "refresh"
+            ],
+            "title": "Action"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requestId",
+          "action",
+          "text"
+        ],
+        "title": "TurnRequest"
+      },
+      "View": {
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schemaversion"
+          },
+          "tripId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Tripid"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sessionid"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "sample"
+            ],
+            "title": "Mode"
+          },
+          "reply": {
+            "type": "string",
+            "title": "Reply"
+          },
+          "providers": {
+            "$ref": "#/components/schemas/Providers"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Brief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memory": {
+            "$ref": "#/components/schemas/Memory"
+          },
+          "shortlist": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Shortlist"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "tripId",
+          "sessionId",
+          "mode",
+          "reply",
+          "providers",
+          "brief",
+          "memory",
+          "shortlist",
+          "evidence"
+        ],
+        "title": "View"
+      }
+    }
+  }
+}

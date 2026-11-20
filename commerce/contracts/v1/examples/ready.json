@@ -1,0 +1,261 @@
+{
+  "status": "ready",
+  "url": "https://shop.example/buy/fictional-40r?source=demo",
+  "note": "Open the verified checkout.",
+  "view": {
+    "schemaVersion": 1,
+    "tripId": "trip-1",
+    "sessionId": "session-fresh",
+    "mode": "live",
+    "reply": "This synthetic wire example exercises the checkout control.",
+    "providers": {
+      "catalog": "live",
+      "senso": "live",
+      "jev": "live",
+      "language": "guided"
+    },
+    "brief": {
+      "month": "June",
+      "market": "US",
+      "currency": "USD",
+      "jacketSize": "40R",
+      "jacketCapMinor": 30000,
+      "cities": [
+        {
+          "name": "Delhi",
+          "events": [
+            {
+              "name": "Client dinner",
+              "dress": "formal"
+            },
+            {
+              "name": "Gallery visit",
+              "dress": "informal"
+            },
+            {
+              "name": "Market walk",
+              "dress": "informal"
+            }
+          ]
+        },
+        {
+          "name": "Istanbul",
+          "events": [
+            {
+              "name": "Evening reception",
+              "dress": "formal"
+            },
+            {
+              "name": "Ferry outing",
+              "dress": "informal"
+            },
+            {
+              "name": "Lunch with friends",
+              "dress": "informal"
+            }
+          ]
+        },
+        {
+          "name": "Barcelona",
+          "events": [
+            {
+              "name": "Closing dinner",
+              "dress": "formal"
+            },
+            {
+              "name": "Museum afternoon",
+              "dress": "informal"
+            },
+            {
+              "name": "Tapas with friends",
+              "dress": "informal"
+            }
+          ]
+        }
+      ],
+      "needs": [
+        {
+          "category": "jackets",
+          "quantity": 2
+        },
+        {
+          "category": "trousers",
+          "quantity": 2
+        },
+        {
+          "category": "pairs of shoes",
+          "quantity": 2
+        },
+        {
+          "category": "shirts",
+          "quantity": 2
+        },
+        {
+          "category": "hats",
+          "quantity": 2
+        }
+      ],
+      "assumptions": [
+        "US delivery market",
+        "USD",
+        "Jacket size 40R",
+        "$300 cap per jacket",
+        "Proposed event names"
+      ]
+    },
+    "memory": {
+      "state": "ready",
+      "ruleText": "I don’t buy final-sale items.",
+      "evidenceId": "rule-1"
+    },
+    "shortlist": {
+      "id": "set-1",
+      "observedAt": "2026-11-20T18:30:00Z",
+      "slot": "formal_jacket",
+      "continuity": "first",
+      "previousWinnerId": null,
+      "winnerId": "offer-b",
+      "changeNote": null,
+      "offers": [
+        {
+          "id": "offer-b",
+          "sellerId": "seller-b",
+          "seller": "Birch Sample Shop",
+          "variantId": "sample-b-navy-40r",
+          "name": "Birch tailored jacket",
+          "size": "40R",
+          "imageUrl": null,
+          "market": "US",
+          "available": true,
+          "priceMinor": 22000,
+          "currency": "USD",
+          "origin": "shopify_live",
+          "outcome": "meets",
+          "checks": [
+            {
+              "id": "condition",
+              "label": "New item",
+              "verdict": "meets",
+              "reason": "The offer lists a new jacket.",
+              "evidenceIds": [
+                "item-b"
+              ]
+            },
+            {
+              "id": "size",
+              "label": "Exact size",
+              "verdict": "meets",
+              "reason": "The selected size is 40R.",
+              "evidenceIds": [
+                "item-b",
+                "brief-1"
+              ]
+            },
+            {
+              "id": "stock",
+              "label": "Availability",
+              "verdict": "meets",
+              "reason": "This variant is listed as available.",
+              "evidenceIds": [
+                "item-b"
+              ]
+            },
+            {
+              "id": "price",
+              "label": "Jacket budget",
+              "verdict": "meets",
+              "reason": "The unit price is within the $300 cap.",
+              "evidenceIds": [
+                "item-b",
+                "brief-1"
+              ]
+            },
+            {
+              "id": "formality",
+              "label": "Formal event",
+              "verdict": "meets",
+              "reason": "The description specifies tailoring for formal dinners.",
+              "evidenceIds": [
+                "item-b"
+              ]
+            },
+            {
+              "id": "returns",
+              "label": "Returnability",
+              "verdict": "meets",
+              "reason": "The policy includes this exact jacket at this price.",
+              "evidenceIds": [
+                "policy-b",
+                "rule-1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "evidence": [
+      {
+        "id": "brief-1",
+        "kind": "buyer_brief",
+        "origin": "buyer",
+        "speaker": null,
+        "title": "Fictional client brief",
+        "quote": "For formal events, source one new tailored jacket in 40R, up to USD 300. Ship to the United States.",
+        "sourceUrl": null,
+        "sellerId": null,
+        "variantId": null,
+        "market": null,
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      {
+        "id": "rule-1",
+        "kind": "buyer_rule",
+        "origin": "buyer",
+        "speaker": null,
+        "title": "Buyer’s saved rule",
+        "quote": "I don’t buy final-sale items.",
+        "sourceUrl": null,
+        "sellerId": null,
+        "variantId": null,
+        "market": null,
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": {
+          "contentId": "sample-content-rule-1",
+          "kbNodeId": "sample-node-rule-1",
+          "versionId": "sample-version-1",
+          "chunkId": null,
+          "chunkIndex": 0
+        }
+      },
+      {
+        "id": "item-b",
+        "kind": "catalog_variant",
+        "origin": "shopify_live",
+        "speaker": null,
+        "title": "Birch Sample Shop · fictional offer",
+        "quote": "New navy tailored jacket for formal dinners. Size 40R is available at USD 220.",
+        "sourceUrl": null,
+        "sellerId": "seller-b",
+        "variantId": "sample-b-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      {
+        "id": "policy-b",
+        "kind": "merchant_policy",
+        "origin": "merchant",
+        "speaker": null,
+        "title": "Birch Sample Shop · sample return policy",
+        "quote": "This navy 40R jacket at the displayed price can be returned within 30 days.",
+        "sourceUrl": "https://shop.example/returns",
+        "sellerId": "seller-b",
+        "variantId": "sample-b-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      }
+    ]
+  }
+}
