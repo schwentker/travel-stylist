@@ -91,6 +91,14 @@ def journey(page, url, mode):
     after = action(page, "reopen").json()
     assert after["sessionId"] != new["sessionId"] and after["tripId"] == new["tripId"]
     expect(page.locator("#transcript li")).to_have_count(1)
+    if mode == "live":
+        for _ in range(4):
+            if after["memory"]["state"] != "indexing":
+                break
+            time.sleep(5)
+            after = action(page, "refresh").json()
+        if after["memory"]["state"] == "unavailable":
+            print("Live recall", after["reply"])
     if board:
         assert after["shortlist"]["id"] == board["id"] and cohort(after) == cohort(before)
     if mode == "sample":

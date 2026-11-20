@@ -102,6 +102,93 @@ def seller_https(url, domain):
         return False
 
 
+def size_key(label):
+    """Normalize only explicit suit lengths. A bare chest measurement has no length."""
+    value = label.strip().upper()
+    match = re.fullmatch(r"(\d{2})[ -]*(REGULAR|REG|R|SHORT|S|LONG|L)", value)
+    return match[1] + match[2][0] if match else value
+
+
+def seller_link(url, seller):
+    storefront = seller.get("url") or ""
+    host = urlsplit(storefront).hostname
+    return seller_https(url, seller.get("domain")) or (
+        seller_https(storefront, host) and seller_https(url, host)
+    )
+
+
+def checkout_link(variant):
+    link = variant.get("checkout_url")
+    if not seller_link(link, variant["seller"]):
+        return None
+    parsed = urlsplit(link)
+    if not any(k.startswith("attribution/") or k == "_gsid" for k in parse_qs(parsed.query)):
+        return None
+    if parsed.path.startswith("/buy/") or variant.get("eligible", {}).get("native_checkout") is not True:
+        # Shopify's attributed seller redirect encodes the exact variant and quantity.
+        variant_number = variant["id"].rsplit("/", 1)[-1]
+        if not variant_number.isdecimal() or parsed.path != f"/buy/{variant_number}:1":
+            return None
+    return link
+
+
+def official_policy(url, seller):
+    if seller_link(url, seller):
+        return True
+    shop = seller["id"].rsplit("/", 1)[-1]
+    return (
+        shop.isdecimal()
+        and seller_https(url, "checkout.shopify.com")
+        and re.fullmatch(rf"/{shop}/policies/\d+\.html", urlsplit(url).path) is not None
+    )
+
+
+def search_candidates(products, brief):
+    candidates = {}
+    for product in products:
+        labels = [
+            value["label"]
+            for option in product.get("options", [])
+            if option["name"].lower() == "size"
+            for value in option.get("values", [])
+            if size_key(value["label"]) == size_key(brief.jacketSize)
+        ]
+        for variant in product.get("variants", []):
+            seller = variant.get("seller", {}).get("id", "")
+            vid = variant.get("id", "")
+            if not seller.startswith("gid://shopify/Shop/") or not vid.startswith(
+                "gid://shopify/ProductVariant/"
+            ):
+                continue
+            sizes = [o["label"] for o in variant.get("options", []) if o["name"].lower() == "size"]
+            direct = len(sizes) == 1 and size_key(sizes[0]) == size_key(brief.jacketSize)
+            if direct:
+                target, label = vid, sizes[0]
+            elif labels and product.get("id", "").startswith("gid://shopify/p/"):
+                target, label = product["id"], labels[0]
+            else:
+                continue
+            price = variant.get("price") or {}
+            comparable = price.get("currency") == brief.currency and isinstance(price.get("amount"), int)
+            rank = (
+                not comparable,
+                comparable and price["amount"] > brief.jacketCapMinor,
+                not bool(checkout_link(variant)),
+                not direct,
+                price["amount"] if comparable else 0,
+            )
+            key = (seller, target, label)
+            if key not in candidates or rank < candidates[key]:
+                candidates[key] = rank
+    return sorted(candidates, key=candidates.get)
+
+
+@dataclass(frozen=True)
+class SearchContinuation:
+    candidates: tuple[tuple[str, str, str], ...] = ()
+    cursor: str | None = None
+
+
 class Shopify:
     last_call = 0.0
 
@@ -148,55 +235,67 @@ class Shopify:
         except (KeyError, ValueError, IndexError, TypeError, StopIteration) as exc:
             raise Blocked("Shopify returned an unreadable catalog response.") from exc
 
-    def search(self, brief):
-        context = {"address_country": brief.market, "currency": brief.currency}
+    def search_page(self, brief, cursor):
+        pagination = {"limit": 40}
+        if cursor:
+            pagination["cursor"] = cursor
         response = self.call(
             "search_catalog",
             {
-                "query": f"formal tailored jacket or blazer size {brief.jacketSize}",
+                "query": f"{brief.jacketSize} suit jacket sport coat blazer",
                 "sources": ["shopify"],
-                "context": context,
+                "context": {"address_country": brief.market, "currency": brief.currency},
                 "filters": {
                     "condition": ["new"],
                     "available": True,
                     "price": {"max": brief.jacketCapMinor},
                     "ships_to": {"country": brief.market},
                 },
-                "pagination": {"limit": 3},
+                "pagination": pagination,
             },
         )
-        keys = {}
-        for product in response["products"]:
-            for variant in product.get("variants", []):
-                seller = variant.get("seller", {}).get("id", "")
-                vid = variant.get("id", "")
-                if seller.startswith("gid://shopify/Shop/") and vid.startswith(
-                    "gid://shopify/ProductVariant/"
-                ):
-                    keys.setdefault((seller, vid), None)
-        listings = []
-        for seller, vid in list(keys)[:3]:
-            row = self.lookup(brief, seller, vid)
-            if row:
-                listings.append(row)
-        return listings
+        page = response.get("pagination") or {}
+        return search_candidates(response["products"], brief), page.get("cursor") if page.get(
+            "has_next_page"
+        ) else None
 
-    def lookup(self, brief, seller_id, variant_id):
+    def search_batch(self, brief, continuation):
+        state = continuation or SearchContinuation()
+        candidates, cursor = state.candidates, state.cursor
+        if not candidates:
+            candidates, cursor = self.search_page(brief, cursor)
+        listings = {}
+        for seller, target, label in candidates[:3]:
+            row = self.lookup(brief, seller, target, label)
+            if row:
+                listings[row.offer.id] = row
+        remaining = tuple(candidates[3:])
+        next_search = SearchContinuation(remaining, cursor) if remaining or cursor else None
+        return list(listings.values()), next_search
+
+    def lookup(self, brief, seller_id, variant_id, size_label=None):
+        by_product = variant_id.startswith("gid://shopify/p/")
         body = self.call(
             "get_product",
             {
                 "id": variant_id,
-                "selected": [{"name": "Size", "label": brief.jacketSize}],
+                "selected": [{"name": "Size", "label": size_label or brief.jacketSize}],
                 "filters": {"shops": [seller_id], "ships_to": {"country": brief.market}},
                 "context": {"address_country": brief.market, "currency": brief.currency},
             },
         )
         product = body.get("product") or {}
         sizes = [o["label"] for o in product.get("selected", []) if o["name"].lower() == "size"]
+        if by_product and product.get("id") != variant_id:
+            return None
+        if len(sizes) != 1 or size_key(sizes[0]) != size_key(brief.jacketSize):
+            return None
+        rows = []
         for v in product.get("variants", []):
             seller = v.get("seller", {})
             if (
-                v.get("id") != variant_id
+                (not by_product and v.get("id") != variant_id)
+                or not v.get("id", "").startswith("gid://shopify/ProductVariant/")
                 or seller.get("id") != seller_id
                 or v.get("source", "shopify") != "shopify"
             ):
@@ -204,20 +303,17 @@ class Shopify:
             options = [o["label"] for o in v.get("options", []) if o["name"].lower() == "size"]
             price = v.get("price") or {}
             stock = (v.get("availability") or {}).get("available")
-            domain = seller.get("domain") or urlsplit(seller.get("url", "")).hostname
-            link = v.get("checkout_url")
-            valid = seller_https(link, domain) and any(
-                k.startswith("attribution/") or k == "_gsid" for k in parse_qs(urlsplit(link).query)
-            )
-            if not valid or v.get("eligible", {}).get("native_checkout") is False:
-                link = None
-            oid = hashlib.sha256((seller_id + "|" + variant_id).encode()).hexdigest()[:24]
-            size = options[0] if len(options) == 1 and sizes == options else None
+            if options != sizes:
+                continue
+            link = checkout_link(v)
+            vid = v["id"]
+            oid = hashlib.sha256((seller_id + "|" + vid).encode()).hexdigest()[:24]
+            size = options[0]
             offer = Offer(
                 id=oid,
                 sellerId=seller_id,
                 seller=seller["name"],
-                variantId=variant_id,
+                variantId=vid,
                 name=v.get("title") or product["title"],
                 size=size,
                 imageUrl=next(
@@ -247,7 +343,7 @@ class Shopify:
                 quote=quote,
                 sourceUrl=v.get("url"),
                 sellerId=seller_id,
-                variantId=variant_id,
+                variantId=vid,
                 market=brief.market,
                 observedAt=now(),
                 senso=None,
@@ -256,20 +352,36 @@ class Shopify:
                 (
                     p["url"]
                     for p in seller.get("links", [])
-                    if p.get("type") == "refund_policy" and seller_https(p.get("url"), domain)
+                    if p.get("type") == "refund_policy" and official_policy(p.get("url"), seller)
                 ),
                 None,
             )
             lp = v.get("list_price") or {}
-            return Listing(
-                offer,
-                item,
-                condition,
-                link,
-                policy_url=policy_url,
-                list_minor=lp.get("amount") if lp.get("currency") == offer.currency else None,
+            rows.append(
+                Listing(
+                    offer,
+                    item,
+                    condition,
+                    link,
+                    policy_url=policy_url,
+                    list_minor=lp.get("amount") if lp.get("currency") == offer.currency else None,
+                )
             )
-        return None
+
+        def priority(row):
+            o = row.offer
+            comparable = o.currency == brief.currency and o.priceMinor is not None
+            return (
+                o.available is not True,
+                row.condition != "new",
+                not comparable,
+                comparable and o.priceMinor > brief.jacketCapMinor,
+                not bool(row.checkout),
+                o.priceMinor if comparable else 0,
+                o.id,
+            )
+
+        return min(rows, key=priority, default=None)
 
 
 class Senso:
@@ -278,12 +390,22 @@ class Senso:
     def call(self, method, path, body=None):
         if not (key := os.getenv("SENSO_API_KEY")):
             raise Blocked("Senso credential unavailable.")
-        return request(
+        response = request(
             method,
             "https://apiv2.senso.ai/api/v1" + path,
             json=body,
             headers={"X-API-Key": key, "X-Senso-Signals": "off"},
         )
+
+        reasons = {
+            401: "Check the server's SENSO_API_KEY (HTTP 401).",
+            402: "Check available Senso credits (HTTP 402).",
+            403: "Check knowledge-base access for this key (HTTP 403).",
+            429: "Senso is rate limiting requests. Refresh later (HTTP 429).",
+        }
+        if response.status_code in reasons:
+            raise Blocked(reasons[response.status_code])
+        return response
 
     def bind(self, binding, text):
         title = "Travel Stylist " + binding
@@ -318,7 +440,7 @@ class Senso:
                 hit.get("content_id") == content
                 and hit.get("kb_node_id", node) == node
                 and isinstance(passage, str)
-                and passage.strip().splitlines() == (binding + "\n" + text).strip().splitlines()
+                and passage.split() == (binding + "\n" + text).split()
             ):
                 return SensoRef(
                     contentId=content,
@@ -350,7 +472,9 @@ class Jev:
             raise Blocked("Jev credential unavailable.")
         q = "return_verdict" if kind == "returns" else "formality_verdict"
         question = (
-            "Do the complete applicable terms establish returnability for this exact item at its current price, including exceptions?"
+            "Use the catalog evidence, buyer rule and complete seller terms to decide whether this one item "
+            "at its current price is returnable in the delivery market. Account for exceptions such as "
+            "custom items and markdowns. Mark unresolved applicability or ambiguous exchange-only terms unknown."
             if kind == "returns"
             else "Does this jacket's description establish suitability for the formal event?"
         )

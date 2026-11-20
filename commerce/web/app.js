@@ -245,6 +245,7 @@ function renderShortlist() {
   const container = get("shortlist");
   const summary = get("candidate-summary");
   const board = view.shortlist;
+  get("source").textContent = view.mode === "live" && board ? "Search again for jackets" : "Source jackets";
   container.replaceChildren();
   if (!board?.offers.length) {
     summary.textContent = board ? "No matching offers in this search." : "One jacket, compared across sellers.";

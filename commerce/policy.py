@@ -2,6 +2,7 @@
 
 import re
 from html.parser import HTMLParser
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -9,31 +10,61 @@ from .providers import Evidence, now
 
 
 class PolicyBody(HTMLParser):
-    def __init__(self):
+    def __init__(self, hosted=False):
         super().__init__()
+        self.hosted = hosted
+        self.container = "body" if hosted else "div"
         self.depth = 0
         self.complete = False
         self.referenced = False
         self.parts = []
+        self.anchor = None
+        self.ui_span = False
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        if not self.depth and "shopify-policy__body" in attrs.get("class", "").split():
+        marker = "page-policies" if self.hosted else "shopify-policy__body"
+        if not self.depth and tag == self.container and marker in attrs.get("class", "").split():
             self.depth = 1
-        elif self.depth and tag == "div":
+        elif self.depth and tag == self.container:
             self.depth += 1
-        if self.depth and tag in ("a", "iframe", "script", "img"):
+        if not self.depth:
+            return
+        if tag == "a":
+            self.anchor = []
+            self.contact = attrs.get("href", "").lower().startswith(("mailto:", "tel:"))
+        elif tag in ("iframe", "script", "img"):
             self.referenced = True
+        elif self.hosted and tag == "span" and "visually-hidden" in attrs.get("class", "").split():
+            self.ui_span = attrs.get("id") in {
+                "forwarding-external-new-window-message",
+                "forwarding-new-window-message",
+                "forwarding-external-message",
+                "checkout-context-step-one",
+            }
 
     def handle_endtag(self, tag):
-        if self.depth and tag == "div":
+        if tag == "span":
+            self.ui_span = False
+        if tag == "a" and self.anchor is not None:
+            action = " ".join(" ".join(self.anchor).lower().split())
+            if not self.contact and action not in {
+                "return form",
+                "start your return or exchange",
+                "report an issue",
+            }:
+                self.referenced = True
+            self.anchor = None
+        if self.depth and tag == self.container:
             self.depth -= 1
             if self.depth == 0:
                 self.complete = True
 
     def handle_data(self, text):
-        if self.depth and text.strip():
+        if self.depth and not self.ui_span and text.strip():
             self.parts.append(text.strip())
+            if self.anchor is not None:
+                self.anchor.append(text.strip())
 
 
 def terms(row):
@@ -50,7 +81,7 @@ def terms(row):
                 content.extend(chunk)
                 if len(content) > 800000:
                     return None
-        parser = PolicyBody()
+        parser = PolicyBody(hosted=urlsplit(url).hostname == "checkout.shopify.com")
         parser.feed(content.decode("utf-8"))
         parser.close()
     except (httpx.HTTPError, UnicodeError, ValueError):
@@ -60,16 +91,26 @@ def terms(row):
         return None
     market = row.offer.market
     markers = {
-        "US": r"United States|U\.S\.|USA",
+        "US": r"United States|U\.S\.?|US|USA",
         "CA": r"Canada",
         "GB": r"United Kingdom",
         "JP": r"Japan",
     }
-    if not re.search(markers.get(market, r"(?!)"), quote, re.IGNORECASE):
+    country = markers.get(market, r"(?!)")
+    # Require an order/returns scope. A merchant mailing address alone proves nothing about coverage.
+    market_scope = (
+        rf"\b(?:orders?|purchases?|items?|products?|customers?|returns?)\s+"
+        rf"(?:(?:shipped|delivered|placed|purchased)\s+)?(?:in|within|to|from)\s+(?:the\s+)?(?:{country})\b"
+        rf"|\b(?:{country})\s+(?:orders?|purchases?|customers?|returns?)\b"
+        r"|\ball (?:orders|purchases|items|products) (?:shipped |delivered )?worldwide\b"
+    )
+    if not re.search(market_scope, quote, re.IGNORECASE):
         return None
     specific = row.offer.name.casefold() in quote.casefold()
     if not specific and not re.search(
-        r"\ball (items|orders|products|purchases)\b", quote, re.IGNORECASE
+        r"\ball (items|orders|products|purchases|(?:unworn and unaltered )?clothing)\b",
+        quote,
+        re.IGNORECASE,
     ):
         return None
     # Effective windows and item exceptions need explicit verification beyond this narrow reader.

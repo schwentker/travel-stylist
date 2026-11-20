@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from contextlib import nullcontext
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
@@ -11,6 +12,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from commerce.app import app
+from commerce.policy import terms
 from commerce.providers import (
     RULE,
     Blocked,
@@ -20,6 +22,8 @@ from commerce.providers import (
     SampleMemory,
     Senso,
     Shopify,
+    checkout_link,
+    official_policy,
 )
 from commerce.workflow import Workflow
 
@@ -233,7 +237,9 @@ class Backend(unittest.TestCase):
         target.checkout = "https://seller.example/buy/40r?_gsid=fake"
         adapter = self.service.catalog["live"]
         self.addCleanup(patch.stopall)
-        patch.object(adapter, "search", side_effect=lambda brief: [deepcopy(target)]).start()
+        patch.object(
+            adapter, "search_batch", side_effect=lambda brief, continuation: ([deepcopy(target)], None)
+        ).start()
         patch.object(adapter, "lookup", side_effect=lambda *args: deepcopy(target)).start()
         self.board()
         return target
@@ -305,7 +311,7 @@ class Backend(unittest.TestCase):
             "description": {"plain": "New tailored jacket for formal dinners."},
             "condition": ["new"],
             "availability": {"available": True},
-            "checkout_url": "https://seller.example/buy/2?_gsid=demo",
+            "checkout_url": "https://seller.example/buy/2:1?_gsid=demo",
         }
         self.service.judge["live"] = SampleJudgment()
 
@@ -320,13 +326,120 @@ class Backend(unittest.TestCase):
             for field, value in [
                 ("options", [{"name": "Size", "label": "42R"}]),
                 ("availability", {"available": False}),
-                ("eligible", {"native_checkout": False}),
+                ("checkout_url", "https://seller.example/buy/3:1?_gsid=demo"),
                 ("source", "external"),
             ]:
                 with patch.dict(variant, {field: value}):
                     self.assertIsNone(self.turn("source_jackets")["shortlist"]["winnerId"])
         with patch.object(adapter, "call", return_value={"products": []}):
             self.assertEqual(self.turn("source_jackets")["shortlist"]["offers"], [])
+
+    def test_search_selects_advertised_size_and_rechecks_pinned_variant(self):
+        self.start("live")
+        self.turn("message", BRIEF)
+        self.service.judge["live"] = SampleJudgment()
+        adapter = self.service.catalog["live"]
+        seller = {
+            "id": "gid://shopify/Shop/7",
+            "name": "Synthetic",
+            "domain": "s.myshopify.com",
+            "url": "https://shop.example",
+        }
+        shop_policy = "https://checkout.shopify.com/7/policies/12.html"
+        seller["links"] = [{"type": "refund_policy", "url": shop_policy}]
+        regular = [{"name": "Size", "label": "40 Regular"}]
+        small = [{"name": "Size", "label": "S"}]
+        url = "https://shop.example/buy/23:1?attribution/utm_source=catalog&_gsid=abc%2Fdef"
+        variant = {
+            "id": "gid://shopify/ProductVariant/23",
+            "seller": seller,
+            "options": regular,
+            "eligible": {"native_checkout": False},
+            "checkout_url": url,
+            "title": "Jacket",
+            "description": {"plain": "New tailored jacket for formal dinners."},
+            "condition": ["new"],
+            "price": {"amount": 21000, "currency": "USD"},
+            "availability": {"available": True},
+        }
+        group = "gid://shopify/p/group"
+        listing = {
+            "id": group,
+            "variants": [dict(variant, options=small, id="gid://shopify/ProductVariant/22")],
+            "options": [{"name": "Size", "values": [{"label": "40 Regular"}]}],
+        }
+        calls = []
+
+        def simulate(name, req):
+            calls.append(req)
+            if name == "search_catalog":
+                return {
+                    "products": [{"variants": [dict(variant, options=small)]}] * 3 + [listing],
+                    "pagination": {"has_next_page": True, "cursor": "next"},
+                }
+            self.assertIn(req["id"], (group, variant["id"]))
+            self.assertEqual(req["selected"], regular)
+            return {
+                "product": {
+                    "id": group,
+                    "selected": regular,
+                    "variants": [dict(variant, seller=dict(seller, id="gid://shopify/Shop/8")), variant],
+                }
+            }
+
+        with patch.object(adapter, "call", side_effect=simulate):
+            board = self.turn("source_jackets")["shortlist"]
+            self.assertTrue(board["winnerId"])
+            self.assertEqual(board["offers"][0]["variantId"], variant["id"])
+            self.assertEqual(self.handoff()["url"], url)
+            self.assertEqual([r.get("id") for r in calls], [None, group, variant["id"]])
+            self.turn("source_jackets")
+            self.assertEqual(calls[3]["pagination"]["cursor"], "next")
+            grant = '<body class="page-policies">All items shipped to the United States can be returned within 30 days.</body>'
+
+            def policy_response(*args, **kwargs):
+                return nullcontext(
+                    httpx.Response(200, text=grant, headers={"content-type": "text/html"})
+                )
+
+            with (
+                patch.dict(self.service.memory, {"live": SampleMemory()}),
+                patch("commerce.policy.httpx.stream", side_effect=policy_response),
+            ):
+                self.turn("save_rule", RULE)
+                fresh = self.start("live", trip=self.view["tripId"])
+                self.assertEqual(fresh["memory"]["state"], "ready")
+                self.assertTrue(fresh["shortlist"]["winnerId"])
+                self.assertEqual(self.handoff()["url"], url)
+        self.assertTrue(official_policy(shop_policy, seller))
+        self.assertFalse(official_policy(shop_policy.replace("/7/", "/8/"), seller))
+        for bad in [
+            url.replace("shop.example", "unrelated.example"),
+            url.replace(":1?", ":2?"),
+            url.replace("/23:", "/22:"),
+            url.split("?")[0],
+            url.replace("https:", "http:"),
+        ]:
+            self.assertIsNone(checkout_link(dict(variant, checkout_url=bad)))
+
+    def test_hosted_policy_requires_market_scope_and_complete_terms(self):
+        row = SampleCatalog().search(None)[0]
+        row.policy_url = "https://checkout.shopify.com/7/policies/12.html"
+        grant = "All items shipped to the United States can be returned within 30 days."
+        form = '<a href="/returns">Return form</a>'
+        for body, applicable in [
+            (grant + form, True),
+            ("All items can be returned. Our address is in the United States.", False),
+            (grant + '<a href="/sale">Sale exclusions</a>', False),
+        ]:
+            html = '<body class="page-policies">' + body + "</body>"
+            response = httpx.Response(200, text=html, headers={"content-type": "text/html"})
+            with patch("commerce.policy.httpx.stream", return_value=nullcontext(response)):
+                doc = terms(row)
+            self.assertEqual(doc is not None, applicable)
+            if doc:
+                self.assertIn(grant, doc.quote)
+                self.assertEqual(doc.variantId, row.offer.variantId)
 
     def test_t07_handoff(self):
         self.board()
@@ -367,8 +480,10 @@ class Backend(unittest.TestCase):
             with patch("commerce.providers.request", return_value=httpx.Response(status)):
                 v = self.turn("source_jackets")
                 self.assertEqual(v["providers"]["catalog"], "unavailable")
-        self.turn("save_rule", RULE)
+        with patch.dict("os.environ", {"SENSO_API_KEY": ""}):
+            self.turn("save_rule", RULE)
         self.assertEqual(self.view["memory"]["state"], "unavailable")
+        self.assertIn("credential unavailable", self.view["reply"])
 
     def test_cap_symbols_and_grouped_amounts(self):
         self.board()

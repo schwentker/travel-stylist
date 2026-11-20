@@ -232,7 +232,7 @@ def synthetic_checkout(page, url, service):
     with (
         patch.object(service, "language", return_value=None),
         patch.dict(service.judge, {"live": SampleJudgment()}),
-        patch.object(catalog, "search", side_effect=lambda _: deepcopy(rows)),
+        patch.object(catalog, "search_batch", side_effect=lambda *_: (deepcopy(rows), None)),
         patch.object(catalog, "lookup", side_effect=lambda *args: deepcopy(winner)) as lookup,
     ):
         view = begin(page, url, "live")
@@ -244,7 +244,10 @@ def synthetic_checkout(page, url, service):
         expect(page.locator("#merchant a")).to_have_count(0)
         assert action(page, "checkout").json()["status"] == "ready"
         lookup.assert_called_with(
-            Brief.model_validate(view["brief"]), winner.offer.sellerId, winner.offer.variantId
+            Brief.model_validate(view["brief"]),
+            winner.offer.sellerId,
+            winner.offer.variantId,
+            winner.offer.size,
         )
         link = page.locator("#merchant a")
         expect(link).to_have_attribute("href", winner.checkout)

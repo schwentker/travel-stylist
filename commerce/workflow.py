@@ -25,9 +25,11 @@ from .providers import (
     SampleCatalog,
     SampleJudgment,
     SampleMemory,
+    SearchContinuation,
     Senso,
     Shopify,
     now,
+    size_key,
 )
 
 
@@ -45,6 +47,7 @@ class Cohort:
     baseline: str | None = None
     baseline_saved: bool = False
     comparison_valid: bool = True
+    next_search: SearchContinuation | None = None
 
 
 class Workflow:
@@ -105,7 +108,7 @@ class Workflow:
         buyer, mode = trip["buyer"], trip["mode"]
         row = self.db.execute("SELECT * FROM rules WHERE buyer=? AND mode=?", (buyer, mode)).fetchone()
         if row is None:
-            return Memory(state="none", ruleText=None, evidenceId=None), None
+            return Memory(state="none", ruleText=None, evidenceId=None), None, None
         binding = row["binding"]
         try:
             adapter = self.memory[mode]
@@ -118,7 +121,11 @@ class Workflow:
             ref = None if pending else adapter.recall(binding, RULE, content, node)
             providers.senso = mode
             if ref is None:
-                return Memory(state="indexing", ruleText=RULE, evidenceId=None), None
+                return (
+                    Memory(state="indexing", ruleText=RULE, evidenceId=None),
+                    None,
+                    "Senso is indexing the saved rule. Refresh trip to check again.",
+                )
             doc = Evidence(
                 id="rule-" + binding,
                 kind="buyer_rule",
@@ -133,10 +140,15 @@ class Workflow:
                 observedAt=now(),
                 senso=ref,
             )
-            return Memory(state="ready", ruleText=RULE, evidenceId=doc.id), doc
-        except (Blocked, ValueError, KeyError, TypeError):
+            return Memory(state="ready", ruleText=RULE, evidenceId=doc.id), doc, None
+        except (Blocked, ValueError, KeyError, TypeError) as exc:
+            reason = str(exc) if isinstance(exc, Blocked) else "Unexpected provider response."
             providers.senso = "unavailable"
-            return Memory(state="unavailable", ruleText=RULE, evidenceId=None), None
+            return (
+                Memory(state="unavailable", ruleText=RULE, evidenceId=None),
+                None,
+                f"Saved-rule recall is on hold. Senso reported: {reason}",
+            )
 
     def assess(self, row, brief, memory, rule, mode, providers, buyer):
         o = row.offer.model_copy(deep=True)
@@ -178,7 +190,7 @@ class Workflow:
         check(
             "size",
             "Exact size",
-            None if o.size is None else o.size == brief.jacketSize,
+            None if o.size is None else size_key(o.size) == size_key(brief.jacketSize),
             f"Requested {brief.jacketSize}, listed {o.size or 'unknown'}.",
             item,
         )
@@ -201,9 +213,11 @@ class Workflow:
         if mode == "live":
             check(
                 "checkout",
-                "Native checkout",
+                "Seller checkout",
                 bool(row.checkout),
-                "Exact native attributed checkout required.",
+                "Verified attributed checkout for this seller and variant."
+                if row.checkout
+                else "No verified checkout link for this seller and variant.",
                 item,
             )
 
@@ -219,6 +233,8 @@ class Workflow:
                 "quote": doc.quote,
                 "evidenceIds": ids,
             }
+            if key == "returns":
+                state.update(catalogEvidence=row.item.quote, quantity=1, condition=row.condition)
             if row.list_minor and comparable and 0 <= o.priceMinor <= row.list_minor:
                 state["discountNumerator"] = 100 * (row.list_minor - o.priceMinor)
                 state["discountDenominator"] = row.list_minor
@@ -267,7 +283,7 @@ class Workflow:
                     providers.senso = "unavailable"
             if valid:
                 docs.append(policy)
-                refs = [rule.id, policy.id]
+                refs = [rule.id, policy.id, row.item.id]
                 gated = discount_gate(policy.quote, row)
                 if gated:
                     checks.append(
@@ -286,7 +302,9 @@ class Workflow:
                     "returns",
                     "Returnability",
                     None,
-                    "Saved rule or applicable seller terms unavailable.",
+                    "Waiting for verified recall of the saved rule."
+                    if not rule
+                    else "The official terms do not establish returnability for this variant, market and price.",
                     [],
                 )
         o.checks = checks
@@ -297,7 +315,7 @@ class Workflow:
     def view(self, trip, sid, reply=None, pending=False, catalog_failed=False, language="guided"):
         mode = trip["mode"]
         providers = Providers(catalog="unused", senso="unused", jev="unused", language=language)
-        memory, rule = self.recall(trip, providers, pending)
+        memory, rule, memory_note = self.recall(trip, providers, pending)
         docs = [rule] if rule else []
         brief = Brief.model_validate_json(trip["brief"]) if trip["brief"] else None
         if brief:
@@ -353,8 +371,8 @@ class Workflow:
                 old = next(o for o in offers if o.id == previous)
                 verdict = next(c for c in old.checks if c.id == "returns")
                 note = f"{old.seller}: {verdict.label} {verdict.verdict}. {eligible[0].seller} now qualifies at the lowest comparable price."
-            if memory.state in {"indexing", "unavailable"}:
-                note = "Checkout on hold until the saved rule can be retrieved."
+            if memory_note:
+                note = memory_note
             board = Shortlist(
                 id=cohort.id,
                 observedAt=cohort.observed,
@@ -387,7 +405,9 @@ class Workflow:
             tripId=trip["id"],
             sessionId=sid,
             mode=mode,
-            reply=reply or (GUIDE if not brief else "Ready to source your formal jacket."),
+            reply=reply
+            or memory_note
+            or (GUIDE if not brief else "Ready to source your formal jacket."),
             providers=providers,
             brief=brief,
             memory=memory,
@@ -458,9 +478,15 @@ class Workflow:
                 n.category.lower() in {"jacket", "jackets"} and n.quantity for n in brief.needs
             ):
                 fail(422, "BRIEF_REQUIRED", "Supply a brief with a jacket slot first.")
-            self.sets.pop(tid, None)
+            previous = self.sets.pop(tid, None)
+            next_search = None
             try:
-                rows = self.catalog[mode].search(brief)
+                if mode == "live":
+                    rows, next_search = self.catalog[mode].search_batch(
+                        brief, previous.next_search if previous else None
+                    )
+                else:
+                    rows = self.catalog[mode].search(brief)
             except (Blocked, ValueError, KeyError, TypeError) as exc:
                 return self.view(
                     trip,
@@ -470,7 +496,9 @@ class Workflow:
                 )
             if mode == "sample":
                 seed(self.db, SampleMemory(), trip["buyer"], mode)
-            self.sets[tid] = Cohort(rows, "new_search" if trip["searched"] else "first")
+            self.sets[tid] = Cohort(
+                rows, "new_search" if trip["searched"] else "first", next_search=next_search
+            )
             self.db.execute("UPDATE trips SET searched=1 WHERE id=?", (tid,))
         elif action == "message":
             try:
@@ -542,7 +570,9 @@ class Workflow:
         if trip["mode"] == "sample":
             return envelope("sample", "Fictional offer. Sample checkout ends here.")
         try:
-            fresh = self.catalog["live"].lookup(view.brief, row.offer.sellerId, row.offer.variantId)
+            fresh = self.catalog["live"].lookup(
+                view.brief, row.offer.sellerId, row.offer.variantId, row.offer.size
+            )
         except (Blocked, ValueError, KeyError, TypeError):
             view.providers.catalog = "unavailable"
             return envelope("unavailable", "The exact quote could not be revalidated.")

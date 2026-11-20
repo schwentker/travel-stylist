@@ -23,7 +23,7 @@ This demo uses fictional sellers and works without provider keys. It shows why a
 | [TypeSafe Jev](https://docs.typesafe.ai/primitives/choice) | The live adapter checks whether a source is sufficient and returns a typed verdict on ambiguous requirements. The interface links the verdict to its source and exposes uncertainty. |
 | [Personal Agent Protocol / Poppy](https://personalagentprotocol.org/docs/1.0/spec) | Deferred. The [design](commerce-plan/01-master-plan.md#m3-who-does-what) outlines where a seller agent could clarify an ambiguous policy and return an attributed reply. |
 
-**Verified live:** Shopify UCP search and exact lookups returned three seller/variant matches. **Verified in the sample:** cross-conversation recall, the Alder-to-Birch change, and the evidence UI. Checkout state transitions were tested with fixtures. Live Senso and Jev verification requires provider keys, and real merchant checkout remains unverified. [Phase Q verification and judge demo claims](commerce/handoff/phase-q-receipt.md)
+**Verified live:** Three successive batches from a Shopify search for the default trip returned nine in-stock jackets in USD, all in 40R or 40 Regular, with attributed seller checkout links for the exact variants. **Verified in the sample:** cross-conversation recall, the Alder-to-Birch change, and the evidence UI. Checkout state transitions were tested with fixtures. Live Senso and Jev verification requires provider keys, and real merchant checkout remains unverified. [Phase Q verification and judge demo claims](commerce/handoff/phase-q-receipt.md)
 
 ## Run locally
 
