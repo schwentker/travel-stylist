@@ -1,0 +1,242 @@
+{
+  "brief": {
+    "month": "June",
+    "market": "US",
+    "currency": "USD",
+    "jacketSize": "40R",
+    "jacketCapMinor": 30000,
+    "cities": [
+      {
+        "name": "Delhi",
+        "events": [
+          {
+            "name": "Client dinner",
+            "dress": "formal"
+          },
+          {
+            "name": "Gallery visit",
+            "dress": "informal"
+          },
+          {
+            "name": "Market walk",
+            "dress": "informal"
+          }
+        ]
+      },
+      {
+        "name": "Istanbul",
+        "events": [
+          {
+            "name": "Evening reception",
+            "dress": "formal"
+          },
+          {
+            "name": "Ferry outing",
+            "dress": "informal"
+          },
+          {
+            "name": "Lunch with friends",
+            "dress": "informal"
+          }
+        ]
+      },
+      {
+        "name": "Barcelona",
+        "events": [
+          {
+            "name": "Closing dinner",
+            "dress": "formal"
+          },
+          {
+            "name": "Museum afternoon",
+            "dress": "informal"
+          },
+          {
+            "name": "Tapas with friends",
+            "dress": "informal"
+          }
+        ]
+      }
+    ],
+    "needs": [
+      {
+        "category": "jackets",
+        "quantity": 2
+      },
+      {
+        "category": "trousers",
+        "quantity": 2
+      },
+      {
+        "category": "pairs of shoes",
+        "quantity": 2
+      },
+      {
+        "category": "shirts",
+        "quantity": 2
+      },
+      {
+        "category": "hats",
+        "quantity": 2
+      }
+    ],
+    "assumptions": [
+      "US delivery market",
+      "USD",
+      "Jacket size 40R",
+      "$300 cap per jacket",
+      "Proposed event names"
+    ]
+  },
+  "briefEvidence": {
+    "id": "brief-1",
+    "kind": "buyer_brief",
+    "origin": "sample",
+    "speaker": null,
+    "title": "Fictional client brief",
+    "quote": "For formal events, source one new tailored jacket in 40R, up to USD 300. Ship to the United States.",
+    "sourceUrl": null,
+    "sellerId": null,
+    "variantId": null,
+    "market": null,
+    "observedAt": "2026-11-20T18:30:00Z",
+    "senso": null
+  },
+  "listings": [
+    {
+      "offer": {
+        "id": "offer-b",
+        "sellerId": "seller-b",
+        "seller": "Birch Sample Shop",
+        "variantId": "sample-b-navy-40r",
+        "name": "Birch tailored jacket",
+        "size": "40R",
+        "imageUrl": null,
+        "market": "US",
+        "available": true,
+        "priceMinor": 22000,
+        "currency": "USD",
+        "origin": "sample"
+      },
+      "item": {
+        "id": "item-b",
+        "kind": "catalog_variant",
+        "origin": "sample",
+        "speaker": null,
+        "title": "Birch Sample Shop · fictional offer",
+        "quote": "New navy tailored jacket for formal dinners. Size 40R is available at USD 220.",
+        "sourceUrl": null,
+        "sellerId": "seller-b",
+        "variantId": "sample-b-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      "policy": {
+        "id": "policy-b",
+        "kind": "sample_policy",
+        "origin": "sample",
+        "speaker": null,
+        "title": "Birch Sample Shop · sample return policy",
+        "quote": "This navy 40R jacket at the displayed price can be returned within 30 days.",
+        "sourceUrl": null,
+        "sellerId": "seller-b",
+        "variantId": "sample-b-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      "condition": "new"
+    },
+    {
+      "offer": {
+        "id": "offer-c",
+        "sellerId": "seller-c",
+        "seller": "Cedar Sample Shop",
+        "variantId": "sample-c-navy-40r",
+        "name": "Cedar evening jacket",
+        "size": "40R",
+        "imageUrl": null,
+        "market": "US",
+        "available": true,
+        "priceMinor": 24500,
+        "currency": "USD",
+        "origin": "sample"
+      },
+      "item": {
+        "id": "item-c",
+        "kind": "catalog_variant",
+        "origin": "sample",
+        "speaker": null,
+        "title": "Cedar Sample Shop · fictional offer",
+        "quote": "New navy tailored jacket for formal dinners. Size 40R is available at USD 245.",
+        "sourceUrl": null,
+        "sellerId": "seller-c",
+        "variantId": "sample-c-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      "policy": {
+        "id": "policy-c",
+        "kind": "sample_policy",
+        "origin": "sample",
+        "speaker": null,
+        "title": "Cedar Sample Shop · sample return policy",
+        "quote": "Selected promotions have special terms. Contact us for details.",
+        "sourceUrl": null,
+        "sellerId": "seller-c",
+        "variantId": "sample-c-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      "condition": "new"
+    },
+    {
+      "offer": {
+        "id": "offer-a",
+        "sellerId": "seller-a",
+        "seller": "Alder Sample Shop",
+        "variantId": "sample-a-navy-40r",
+        "name": "Alder dinner jacket",
+        "size": "40R",
+        "imageUrl": null,
+        "market": "US",
+        "available": true,
+        "priceMinor": 18000,
+        "currency": "USD",
+        "origin": "sample"
+      },
+      "item": {
+        "id": "item-a",
+        "kind": "catalog_variant",
+        "origin": "sample",
+        "speaker": null,
+        "title": "Alder Sample Shop · fictional offer",
+        "quote": "New navy tailored jacket for formal dinners. Size 40R is available at USD 180.",
+        "sourceUrl": null,
+        "sellerId": "seller-a",
+        "variantId": "sample-a-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      "policy": {
+        "id": "policy-a",
+        "kind": "sample_policy",
+        "origin": "sample",
+        "speaker": null,
+        "title": "Alder Sample Shop · sample return policy",
+        "quote": "The navy 40R jacket at its current sale price is final sale.",
+        "sourceUrl": null,
+        "sellerId": "seller-a",
+        "variantId": "sample-a-navy-40r",
+        "market": "US",
+        "observedAt": "2026-11-20T18:30:00Z",
+        "senso": null
+      },
+      "condition": "new"
+    }
+  ]
+}

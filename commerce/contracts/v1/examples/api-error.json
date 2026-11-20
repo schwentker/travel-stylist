@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "STALE_SHORTLIST",
+    "message": "Refresh this shortlist."
+  }
+}

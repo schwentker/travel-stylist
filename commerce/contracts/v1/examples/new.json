@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "tripId": "trip-1",
+  "sessionId": "session-before",
+  "mode": "sample",
+  "reply": "Enter your trip brief.",
+  "providers": {
+    "catalog": "unused",
+    "senso": "unused",
+    "jev": "unused",
+    "language": "guided"
+  },
+  "brief": null,
+  "memory": {
+    "state": "none",
+    "ruleText": null,
+    "evidenceId": null
+  },
+  "shortlist": null,
+  "evidence": []
+}
