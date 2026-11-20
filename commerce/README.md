@@ -6,7 +6,7 @@ From the repository root with Python 3.12, install `commerce/requirements.txt` a
 python -m uvicorn commerce.app:app --host 127.0.0.1 --port 8000
 ```
 
-Run a single worker. SQLite holds buyer/trip bindings, briefs, explicit rules and receipts at `commerce/runtime/state.sqlite3` (override with `COMMERCE_DB`). Shortlists and checkout URLs expire after 30 minutes and on restart. The same-origin client must retain its HTTP-only buyer cookie when opening a new conversation. The three web files are Phase F placeholders reserved for the GUI author.
+Run a single worker. SQLite holds buyer/trip bindings, briefs, explicit rules and receipts at `commerce/runtime/state.sqlite3` (override with `COMMERCE_DB`). Shortlists and checkout URLs expire after 30 minutes and on restart. The same-origin client must retain its HTTP-only buyer cookie when opening a new conversation. The browser app is served at the root URL. For the walkthrough, see the [judge demo](../README.md#two-minute-judge-demo).
 
 In sample mode, enter the June Delhi/Istanbul/Barcelona brief, source jackets, save “I don’t buy final-sale items”, then reopen the trip. Alder leads before the save and Birch leads after recall. Edit the month, quantities, jacket size, delivery market or currency and cap in text. For a named event use `Delhi formal event: Awards dinner`. A complete Brief JSON replaces all fields. The server displays the resulting brief for review.
 

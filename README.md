@@ -1,49 +1,41 @@
 # Travel Stylist
 
-Travel Stylist is a planned commerce assistant for buying clothes around a trip. The demo starts with nine June events across Delhi, Istanbul and Barcelona and a brief for ten new items. It takes one formal jacket from discovery through a seller-specific comparison and merchant checkout handoff.
+**A trip-shopping assistant that remembers what you won’t buy and shows exactly why its recommendation changes.**
 
-## Project status
+Plan a wardrobe for nine June events across Delhi, Istanbul, and Barcelona. Travel Stylist turns the trip into ten shopping slots, then focuses on one formal jacket. It compares seller-specific variants by size, availability, price, and applicable return policy. Every check opens the evidence behind it.
 
-The current deliverables are the plan, prompts, interface contract and fictional sample response. The commerce application and its live integrations are planned. The shopper completes payment on the merchant site.
+## Two-minute judge demo
 
-## What the demo shows
+1. Select **Sample**, click **Start trip**, then choose **Use sample wording** and **Send message**.
+2. Click **Source jackets**. Alder starts as the recommended jacket at **$180**.
+3. Click **Save “No final-sale items”**. Checkout goes on hold while the rule is indexing.
+4. Click **New conversation for this trip**. The saved rule carries over to the same shortlist. Alder drops out because its policy says final sale. **Birch at $220** becomes the recommendation. Cedar stays **Unknown** because its policy is inconclusive.
+5. Open Alder’s returnability check to read the policy excerpt, then click **Check checkout** on Birch to see the sample handoff.
 
-1. Enter the trip and see the event schedule and ten purchase slots.
-2. Compare up to three jackets using the exact seller, size, availability and price.
-3. Save “I don’t buy final-sale items.”
-4. Open a fresh conversation for the same trip. Retrieve the rule, check the same shortlist and explain any change using the seller’s evidence.
-5. Refresh the selected variant and open the attributed checkout link returned by Shopify.
+This demo uses fictional sellers and works without provider keys. It shows why a cheaper offer can lose and lets judges inspect the source for that decision.
 
-In the sample, Alder leads at $180 before the rule. Its final-sale policy then disqualifies it, Birch leads at $220, and Cedar stays Unknown. A live run requires evidence about the actual sellers and can produce a different outcome. The interface labels fictional evidence even when a live service processes it.
+## Protocols and evidence
 
-## Planned architecture
-
-| Component | Responsibility |
+| Component | What it does |
 | --- | --- |
-| Browser | Brief, Candidates and Evidence panels, with text input and explicit save and handoff controls |
-| FastAPI | Same-origin HTML, CSS and JavaScript, validated request handling, ranking and checkout revalidation |
-| SQLite | Trip, buyer preferences, save receipts and source bindings |
-| Shopify UCP Global Catalog | On-demand discovery and exact variant lookup. Current offers stay in short-lived task memory. |
-| Senso | Scoped retrieval of buyer rules and applicable policy passages |
-| TypeSafe Jev | Typed interpretation of ambiguous requirements from supplied passages |
-| Local language model | Optional natural-language intent extraction, with guided input when unavailable |
-| Deepgram | Optional push-to-talk after core verification. Poppy seller clarification is deferred. |
+| [Shopify Universal Commerce Protocol (UCP)](https://shopify.dev/docs/agents/catalog/global-catalog) | Live mode calls Shopify’s Global Catalog MCP endpoint with `search_catalog` and `get_product`. It verifies the seller and exact variant, then rechecks price and eligibility before surfacing an attributed merchant checkout link. If the quote changes, the buyer must confirm again. |
+| [Senso](https://docs.senso.ai/docs/concepts) | The live adapter scopes preference retrieval to the buyer and document. The sample demonstrates the same save-and-recall flow with local fixtures. |
+| [TypeSafe Jev](https://docs.typesafe.ai/primitives/choice) | The live adapter checks whether a source is sufficient and returns a typed verdict on ambiguous requirements. The interface links the verdict to its source and exposes uncertainty. |
+| [Personal Agent Protocol / Poppy](https://personalagentprotocol.org/docs/1.0/spec) | Deferred. The [design](commerce-plan/01-master-plan.md#m3-who-does-what) outlines where a seller agent could clarify an ambiguous policy and return an attributed reply. |
 
-## Planning files
+**Verified live:** Shopify UCP search and exact lookups returned three seller/variant matches. **Verified in the sample:** cross-conversation recall, the Alder-to-Birch change, and the evidence UI. Checkout state transitions were tested with fixtures. Live Senso and Jev verification requires provider keys, and real merchant checkout remains unverified. [Backend verification receipt](commerce/handoff/phase-b-receipt.md)
 
-- [Master plan](commerce-plan/01-master-plan.md) covers scope, ownership and the parallel and serial schedules.
-- [Review packet](commerce-plan/00-gemini-pressure-test.md) is the standalone assignment for the first Gemini chat.
-- [Interface and acceptance cases](commerce-plan/02-contract-and-cases.md) defines routes, payloads and expected failures.
-- [Codex prompts](commerce-plan/03-codex-prompts.md) cover revision, foundation, build, integration and rehearsal.
-- [Gemini GUI assignment](commerce-plan/04-gemini-gui-prompt.md) describes its three browser files. Use the frozen handoff after the contract is approved.
-- [Sample response](commerce-plan/05-sample-response.json) illustrates the result after the final-sale rule is applied.
+## Run locally
 
-- [Wire examples](commerce-plan/08-wire-examples.json) exercise all checkout outcomes and a stale-shortlist error with synthetic data.
+Use Python 3.12. From the repository root on macOS or Linux:
 
-## Current phase
+```sh
+python3.12 -m venv .venv-commerce
+source .venv-commerce/bin/activate
+python -m pip install -r commerce/requirements.txt
+python -m uvicorn commerce.app:app --port 8000
+```
 
-The independent review and planning revision are complete. Read the [review decisions](commerce-plan/07-revision-decisions.md). Phase F begins on the operator’s explicit start, using GPT-6.2-Astra with XHigh effort. Pause at every phase boundary, announce the next model and effort, and wait for the operator. The backend and GUI can run in parallel after the interface freeze.
+Open [localhost:8000](http://127.0.0.1:8000). FastAPI serves the browser app and API from the same origin. SQLite persists the trip brief and buyer preferences. Live offers and checkout URLs are held in short-lived task memory.
 
-## Acceptance
-
-A live claim needs an observed provider result. Verify a fresh conversation, an explicitly saved rule, traceable evidence, exact variant selection and a working merchant link. Check conflicting or missing policy, duplicate saves, changed prices and blocked providers. Keep sample outcomes distinct from live results.
+[Backend and live-mode setup](commerce/README.md) · [Frozen API v1](commerce/contracts/v1/openapi.json) · [Acceptance cases](commerce-plan/02-contract-and-cases.md) · [Project plan](commerce-plan/01-master-plan.md)
