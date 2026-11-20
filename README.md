@@ -26,8 +26,8 @@ In the sample, Alder leads at $180 before the rule. Its final-sale policy then d
 | Shopify UCP Global Catalog | On-demand discovery and exact variant lookup. Current offers stay in short-lived task memory. |
 | Senso | Scoped retrieval of buyer rules and applicable policy passages |
 | TypeSafe Jev | Typed interpretation of ambiguous requirements from supplied passages |
-| Local language model | Optional natural-language intent and explanation, with guided input when unavailable |
-| Poppy or Deepgram | Optional seller clarification or push-to-talk after the core is working |
+| Local language model | Optional natural-language intent extraction, with guided input when unavailable |
+| Deepgram | Optional push-to-talk after core verification. Poppy seller clarification is deferred. |
 
 ## Planning files
 
@@ -38,28 +38,12 @@ In the sample, Alder leads at $180 before the rule. Its final-sale policy then d
 - [Gemini GUI assignment](commerce-plan/04-gemini-gui-prompt.md) describes its three browser files. Use the frozen handoff after the contract is approved.
 - [Sample response](commerce-plan/05-sample-response.json) illustrates the result after the final-sale rule is applied.
 
-## Review before kickoff
+- [Wire examples](commerce-plan/08-wire-examples.json) exercise all checkout outcomes and a stale-shortlist error with synthetic data.
 
-Send the review packet to Gemini and bring back the full critique. Codex checks the findings against primary sources, revises the plan and prompts, and pauses for the start signal. Freeze the interface and sample responses first. Backend and GUI work can then overlap. Both must be available for browser integration and checkout verification.
+## Current phase
+
+The independent review and planning revision are complete. Read the [review decisions](commerce-plan/07-revision-decisions.md). Phase F begins on the operator’s explicit start, using GPT-6.2-Astra with XHigh effort. Pause at every phase boundary, announce the next model and effort, and wait for the operator. The backend and GUI can run in parallel after the interface freeze.
 
 ## Acceptance
 
 A live claim needs an observed provider result. Verify a fresh conversation, an explicitly saved rule, traceable evidence, exact variant selection and a working merchant link. Check conflicting or missing policy, duplicate saves, changed prices and blocked providers. Keep sample outcomes distinct from live results.
-
-## Publish the planning repository
-
-Use a private repository initially. This sequence assumes the project directory has no Git metadata and GitHub CLI is installed. It stages only this README and the reviewed planning files.
-
-~~~sh
-cd /Users/andres/dev/travel-stylist
-gh auth status
-# If needed, run gh auth login before continuing.
-git init -b main
-git add README.md commerce-plan/
-git diff --cached --stat
-git diff --cached
-git commit -m "Add travel commerce plan and build prompts"
-gh repo create travel-stylist --private --source=. --remote=origin --push
-~~~
-
-Configure a Codex Cloud environment against the repository after the push if you want future work to run independently of this laptop. Keep provider credentials out of Git and attach the complete Gemini critique to the revision task when available.

@@ -90,6 +90,13 @@
         "category": "hats",
         "quantity": 2
       }
+    ],
+    "assumptions": [
+      "US delivery market",
+      "USD",
+      "Jacket size 40R",
+      "$300 cap per jacket",
+      "Proposed event names"
     ]
   },
   "memory": {
@@ -348,7 +355,7 @@
     {
       "id": "rule-1",
       "kind": "buyer_rule",
-      "origin": "buyer",
+      "origin": "sample",
       "speaker": null,
       "title": "Buyer’s saved rule",
       "quote": "I don’t buy final-sale items.",
@@ -357,7 +364,13 @@
       "variantId": null,
       "market": null,
       "observedAt": "2026-11-20T18:30:00Z",
-      "senso": null
+      "senso": {
+        "contentId": "sample-content-rule-1",
+        "kbNodeId": "sample-node-rule-1",
+        "versionId": "sample-version-1",
+        "chunkId": null,
+        "chunkIndex": 0
+      }
     },
     {
       "id": "item-a",
@@ -413,7 +426,13 @@
       "variantId": "sample-b-navy-40r",
       "market": "US",
       "observedAt": "2026-11-20T18:30:00Z",
-      "senso": null
+      "senso": {
+        "contentId": "sample-content-policy-b",
+        "kbNodeId": "sample-node-policy-b",
+        "versionId": "sample-version-1",
+        "chunkId": "sample-chunk-policy-b",
+        "chunkIndex": 0
+      }
     },
     {
       "id": "item-c",
