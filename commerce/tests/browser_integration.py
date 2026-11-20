@@ -7,8 +7,8 @@ import threading
 import time
 from contextlib import contextmanager
 from copy import deepcopy
-from urllib.parse import urlsplit
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 import uvicorn
 from playwright.sync_api import expect, sync_playwright
@@ -119,6 +119,68 @@ def sample_flow(page, url, service):
     assert new_board["id"] != board["id"] and new_board["continuity"] == "new_search"
     print(
         "PASS sample browser, fresh recall, exact evidence, keyboard return, phone layout, expired set and recovery"
+    )
+
+
+def sparse_boards(page, url, service):
+    rows = SampleCatalog().search(None)
+    for row in rows:
+        row.offer.imageUrl = None
+        row.item.quote = "Fictional catalog detail. " * 100
+    with (
+        patch.object(service.catalog["sample"], "search", side_effect=[[], rows[:1], rows[:2]]),
+        patch.object(
+            service.judge["sample"], "judge", return_value=("unknown", "Insufficient evidence.")
+        ),
+    ):
+        empty = begin(page, url, "sample")
+        assert empty["shortlist"]["offers"] == []
+        expect(page.locator(".offer")).to_have_count(0)
+        for count in (1, 2):
+            board = action(page, "source").json()["shortlist"]
+            assert board["winnerId"] is None and board["continuity"] == "new_search"
+            expect(page.locator(".offer")).to_have_count(count)
+            expect(page.get_by_text("No photo supplied", exact=True)).to_have_count(count)
+            expect(page.locator("#checkout")).to_be_disabled()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.get_by_role("button", name="Formality Unknown").first.press("Enter")
+        expect(page.locator("#evidence blockquote")).to_have_text(rows[0].item.quote.strip())
+        assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+        draft = "Why is this jacket marked unknown?"
+        page.locator("#draft").fill(draft)
+        page.route("**/turns", lambda route: route.abort(), times=1)
+        page.locator("#send").press("Enter")
+        expect(page.locator("#notice")).to_contain_text("Try again")
+        expect(page.locator("#draft")).to_have_value(draft)
+
+        # Simulate a committed save whose HTTP response was lost.
+        def lose_save_response(route):
+            assert route.fetch().ok
+            route.abort()
+
+        page.route("**/turns", lose_save_response, times=1)
+        page.locator("#save").press("Enter")
+        retry = page.get_by_role("button", name="Retry", exact=True)
+        expect(retry).to_be_visible()
+        with page.expect_response(lambda r: r.url.endswith("/turns")) as received:
+            retry.press("Enter")
+        assert received.value.json()["memory"]["state"] == "ready"
+        expect(page.locator("#save")).to_be_disabled()
+        buyer = page.context.cookies(url)[0]["value"]
+        with service.lock:
+            assert (
+                service.db.execute("SELECT COUNT(*) FROM rules WHERE buyer=?", (buyer,)).fetchone()[0]
+                == 1
+            )
+        # A second conversation supersedes the first session while its tab is still open.
+        newer = page.context.request.post(
+            url + "/api/sessions", data={"mode": "sample", "tripId": empty["tripId"]}
+        )
+        assert newer.ok and action(page, "refresh").status == 409
+        expect(page.locator("#draft")).to_have_value(draft)
+        expect(page.locator("#checkout")).to_be_disabled()
+    print(
+        "PASS 0/1/2 offers, all Unknown, missing photos, long mobile citation, retained draft and superseded session"
     )
 
 
@@ -244,7 +306,7 @@ def main():
     errors = []
     with serve(service) as url, sync_playwright() as driver:
         browser = driver.chromium.launch(executable_path=shutil.which("chromium"))
-        flows = [sample_flow] + ([live_flow] if args.live else []) + [synthetic_checkout]
+        flows = [sample_flow, sparse_boards] + ([live_flow] if args.live else []) + [synthetic_checkout]
         for flow in flows:
             page = browser.new_page(viewport={"width": 1440, "height": 950})
             inspect_requests(page, url, errors)

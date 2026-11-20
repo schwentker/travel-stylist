@@ -50,6 +50,28 @@ class Listing:
     policy_url: str | None = None
     list_minor: int | None = None
 
+    def comparison_facts(self):
+        # Exclude presentation, observation time and rotating attribution tokens.
+        o = self.offer
+        return (
+            o.priceMinor,
+            o.currency,
+            o.available,
+            o.size,
+            o.market,
+            o.origin,
+            self.condition,
+            self.list_minor,
+            bool(self.checkout),
+            self.policy_url,
+            self.item.kind,
+            self.item.origin,
+            self.item.sellerId,
+            self.item.variantId,
+            self.item.market,
+            self.item.quote,
+        )
+
 
 class SampleCatalog:
     def search(self, brief):
@@ -295,8 +317,8 @@ class Senso:
             if (
                 hit.get("content_id") == content
                 and hit.get("kb_node_id", node) == node
-                and binding in passage.splitlines()
-                and text in passage
+                and isinstance(passage, str)
+                and passage.strip().splitlines() == (binding + "\n" + text).strip().splitlines()
             ):
                 return SensoRef(
                     contentId=content,

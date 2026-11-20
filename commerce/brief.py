@@ -80,17 +80,31 @@ def edit(text, previous):
         set_field("jacketSize", m[1].upper(), "Jacket size")
     if m := re.search(r"\b(?:ship(?:ping)? to|deliver(?:y)? (?:to|market)|market)\s+([a-z]{2})\b", msg):
         set_field("market", m[1].upper(), "US delivery")
-    if m := re.search(r"\b(usd|jpy|eur|gbp|cad)\b", msg):
-        if m[1].upper() != b["currency"] and not re.search(
-            r"(?:\$|¥|€|£|usd\s*|jpy\s*|eur\s*|gbp\s*|cad\s*)\d", msg
-        ):
-            raise ValueError("Supply a cap in the new currency.")
-        set_field("currency", m[1].upper(), "USD")
-    if m := re.search(r"(?:\$|¥|€|£|usd\s*|jpy\s*|eur\s*|gbp\s*|cad\s*)(\d+(?:\.\d+)?)", msg):
-        amount = Decimal(m[1]) * (1 if b["currency"] == "JPY" else 100)
+    code = re.search(r"\b(usd|jpy|eur|gbp|cad)\b", msg)
+    cap = re.search(r"(?:([$¥€£])|\b(?:usd|jpy|eur|gbp|cad))\s*(\d+(?:[.,]\d+)*)", msg)
+    currency = code[1].upper() if code else b["currency"]
+    if cap:
+        symbol, raw = cap.groups()
+        if symbol:
+            by_symbol = {
+                "¥": "JPY",
+                "€": "EUR",
+                "£": "GBP",
+                "$": currency if currency == "CAD" else "USD",
+            }
+            if code and currency != by_symbol[symbol]:
+                raise ValueError("Currency symbol and code disagree.")
+            currency = by_symbol[symbol]
+        if not re.fullmatch(r"(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?", raw):
+            raise ValueError("Invalid amount grouping.")
+        amount = Decimal(raw.replace(",", "")) * (1 if currency == "JPY" else 100)
         if amount != int(amount):
             raise ValueError("Invalid currency precision.")
         set_field("jacketCapMinor", int(amount), "$300")
+    elif currency != b["currency"]:
+        raise ValueError("Supply a cap in the new currency.")
+    if code or cap:
+        set_field("currency", currency, "USD")
     if previous is not None and b == original:
         return None
     return Brief.model_validate(b).model_dump()

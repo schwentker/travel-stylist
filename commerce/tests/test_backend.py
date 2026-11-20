@@ -17,6 +17,7 @@ from commerce.providers import (
     Jev,
     SampleCatalog,
     SampleJudgment,
+    SampleMemory,
     Senso,
     Shopify,
 )
@@ -120,6 +121,16 @@ class Backend(unittest.TestCase):
             self.assertEqual(held["memory"]["state"], "unavailable")
         self.assertEqual(self.handoff("offer-c")["status"], "unavailable")
 
+    def test_rule_removed_in_isolated_control(self):
+        first = self.board()
+        self.turn("save_rule", RULE)
+        self.assertEqual(self.turn("refresh")["shortlist"]["winnerId"], "offer-b")
+        self.service.db.execute("DELETE FROM rules WHERE mode='sample'")
+        view = self.start(trip=self.view["tripId"])
+        self.assertEqual(view["memory"]["state"], "none")
+        self.assertEqual(view["shortlist"]["id"], first["id"])
+        self.assertEqual(view["shortlist"]["winnerId"], "offer-a")
+
     def test_t03_isolation_receipts_restart(self):
         first = self.board()
         rid = str(uuid4())
@@ -170,6 +181,8 @@ class Backend(unittest.TestCase):
             {"market": "JP"},
             {"variantId": "other"},
             {"kind": "merchant_reply"},
+            {"quote": "Under this expired policy, this jacket can be returned."},
+            {"quote": "Full-price items only. This jacket can be returned."},
             {"quote": ""},
         ]:
             b.policy = original.model_copy(update=changes)
@@ -224,6 +237,57 @@ class Backend(unittest.TestCase):
         patch.object(adapter, "lookup", side_effect=lambda *args: deepcopy(target)).start()
         self.board()
         return target
+
+    def test_live_offer_requires_matching_catalog_evidence(self):
+        self.live()
+        row = self.service.sets[self.view["tripId"]].rows[0]
+        item = row.item
+        for fields in (
+            {"origin": "sample"},
+            {"kind": "merchant_reply"},
+            {"sellerId": "other"},
+            {"variantId": "other"},
+            {"market": "JP"},
+        ):
+            with (
+                self.subTest(fields=fields),
+                patch.object(self.service.judge["live"], "judge", wraps=SampleJudgment().judge) as judge,
+            ):
+                row.item = item.model_copy(update=fields)
+                board = self.turn("refresh")["shortlist"]
+                self.assertIsNone(board["winnerId"])
+                self.assertEqual(board["offers"][0]["outcome"], "unknown")
+                self.assertNotIn(item.id, [doc["id"] for doc in self.view["evidence"]])
+                self.assertIsNone(self.handoff(row.offer.id)["url"])
+                judge.assert_not_called()
+
+    def test_sample_policy_cannot_approve_live_offer(self):
+        self.live()
+        row = self.service.sets[self.view["tripId"]].rows[0]
+        policy = next(r.policy for r in SampleCatalog().search(None) if r.offer.id == row.offer.id)
+        row.policy_url = "https://seller.example/policies/refund"
+        row.policy = policy.model_copy(update={"sourceUrl": row.policy_url})
+        with patch.dict(self.service.memory, {"live": SampleMemory()}):
+            self.turn("save_rule", RULE)
+            with patch.object(
+                self.service.judge["live"], "judge", wraps=SampleJudgment().judge
+            ) as judge:
+                view = self.turn("refresh")
+                self.assertEqual(view["memory"]["state"], "ready")
+                self.assertIsNone(view["shortlist"]["winnerId"])
+                self.assertNotIn(policy.id, [doc["id"] for doc in view["evidence"]])
+                self.assertFalse(any(call.args[0] == "returns" for call in judge.call_args_list))
+
+    def test_stock_loss_invalidates_before_after_comparison(self):
+        target = self.live()
+        self.assertEqual(self.view["shortlist"]["winnerId"], target.offer.id)
+        target.offer.available = False
+        self.assertEqual(self.handoff()["status"], "unavailable")
+        with patch.dict(self.service.memory, {"live": SampleMemory()}):
+            self.turn("save_rule", RULE)
+            board = self.start("live", trip=self.view["tripId"])["shortlist"]
+            self.assertIsNone(board["previousWinnerId"])
+            self.assertIsNone(board["changeNote"])
 
     def test_t06_live_lookup(self):
         adapter = Shopify()
@@ -306,6 +370,19 @@ class Backend(unittest.TestCase):
         self.turn("save_rule", RULE)
         self.assertEqual(self.view["memory"]["state"], "unavailable")
 
+    def test_cap_symbols_and_grouped_amounts(self):
+        self.board()
+        for cap, expected in [
+            ("¥22,000", ("JPY", 22000)),
+            ("€220.50", ("EUR", 22050)),
+            ("GBP 1,200.25", ("GBP", 120025)),
+            ("CAD $1,200", ("CAD", 120000)),
+        ]:
+            brief = self.turn("message", "Set cap " + cap + ".")["brief"]
+            self.assertEqual((brief["currency"], brief["jacketCapMinor"]), expected)
+        for cap in ("JPY 20.50", "USD 12,00", "GBP €30"):
+            self.turn("message", "Set cap " + cap + ".", status=422)
+
     def test_scoped_senso(self):
         adapter = Senso()
         ref = {"content_id": "c", "kb_node_id": "n", "chunk_text": "binding\n" + RULE}
@@ -316,9 +393,33 @@ class Backend(unittest.TestCase):
         ]
         with patch.object(adapter, "call", side_effect=responses) as call:
             self.assertEqual(adapter.bind("binding", RULE), ("c", "n"))
-            self.assertEqual(adapter.recall("binding", RULE, "c", "n").contentId, "c")
+            found = adapter.recall("binding", RULE, "c", "n")
+            self.assertEqual((found.contentId, found.kbNodeId), ("c", "n"))
+            self.assertIsNone(found.versionId)
+            self.assertIsNone(found.chunkId)
+            self.assertIsNone(found.chunkIndex)
             self.assertEqual(call.call_args.args[2]["content_ids"], ["c"])
             self.assertTrue(call.call_args.args[2]["require_scoped_ids"])
+        for passage in ("binding\nWithdrawn: " + RULE, "binding\n" + RULE + " That rule is cancelled."):
+            hit = dict(ref, chunk_text=passage)
+            response = httpx.Response(200, json={"results": [hit]})
+            with (
+                patch.object(adapter, "call", side_effect=[responses[1], response]),
+                self.assertRaises(Blocked),
+            ):
+                adapter.recall("binding", RULE, "c", "n")
+        exact = dict(ref, version_id="v7", content_chunk_id="chunk-42", chunk_index=2)
+        hit = httpx.Response(200, json={"results": [exact]})
+        with patch.object(adapter, "call", side_effect=[responses[1], hit]):
+            found = adapter.recall("binding", RULE, "c", "n")
+            self.assertEqual((found.versionId, found.chunkId, found.chunkIndex), ("v7", "chunk-42", 2))
+        for field in ("content_id", "kb_node_id"):
+            wrong = httpx.Response(200, json={"results": [dict(ref, **{field: "other"})]})
+            with (
+                patch.object(adapter, "call", side_effect=[responses[1], wrong]),
+                self.assertRaises(Blocked),
+            ):
+                adapter.recall("binding", RULE, "c", "n")
         for status in [402, 409]:
             with (
                 patch.object(adapter, "call", return_value=httpx.Response(status, json={})),

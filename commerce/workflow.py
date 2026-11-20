@@ -44,7 +44,7 @@ class Cohort:
     expires: float = field(default_factory=lambda: time.monotonic() + 1800)
     baseline: str | None = None
     baseline_saved: bool = False
-    quote_changed: bool = False
+    comparison_valid: bool = True
 
 
 class Workflow:
@@ -146,6 +146,26 @@ class Workflow:
         def check(key, label, test, reason, ids):
             verdict = "unknown" if test is None else ("meets" if test else "fails")
             checks.append(Check(id=key, label=label, verdict=verdict, reason=reason, evidenceIds=ids))
+
+        source = row.item
+        origin = "shopify_live" if mode == "live" else "sample"
+        if not (
+            source.kind == "catalog_variant"
+            and source.origin == o.origin == origin
+            and source.sellerId == o.sellerId
+            and source.variantId == o.variantId
+            and source.market == o.market
+        ):
+            check(
+                "catalog",
+                "Catalog evidence",
+                None,
+                "Missing catalog evidence for this seller, variant and market.",
+                [],
+            )
+            o.checks = checks
+            o.outcome = "unknown"
+            return o, []
 
         item = [row.item.id]
         check(
@@ -317,9 +337,17 @@ class Workflow:
                 cohort.baseline_saved = True
             previous = (
                 cohort.baseline
-                if memory.state != "none" and not cohort.quote_changed and cohort.baseline_saved
+                if memory.state != "none" and cohort.comparison_valid and cohort.baseline_saved
                 else None
             )
+            if previous:
+                # Hold the non-rule checks constant before attributing a change to the rule.
+                baseline_candidates = (
+                    o for o in offers if all(c.verdict == "meets" for c in o.checks if c.id != "returns")
+                )
+                control = min(baseline_candidates, key=lambda o: (o.priceMinor, o.id), default=None)
+                if control is None or control.id != previous:
+                    previous = None
             note = None
             if previous and winner and previous != winner:
                 old = next(o for o in offers if o.id == previous)
@@ -523,7 +551,7 @@ class Workflow:
             row.offer.variantId,
         ):
             cohort.rows.remove(row)
-            cohort.quote_changed = True
+            cohort.comparison_valid = False
             view = self.view(trip, sid)
             return envelope("unavailable", "The exact seller and variant could not be verified.")
         changed = (fresh.offer.priceMinor, fresh.offer.currency) != (
@@ -531,7 +559,12 @@ class Workflow:
             row.offer.currency,
         )
         cohort.rows[cohort.rows.index(row)] = fresh
-        cohort.quote_changed |= changed
+        if row.comparison_facts() != fresh.comparison_facts():
+            cohort.comparison_valid = False
+        if row.policy is not None:
+            fresh.policy = terms(fresh)
+            if fresh.policy is None or fresh.policy.quote != row.policy.quote:
+                cohort.comparison_valid = False
         cohort.observed = now()
         view = self.view(trip, sid)
         if view.shortlist.winnerId != req.offerId or not fresh.checkout:
