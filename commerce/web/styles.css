@@ -108,3 +108,16 @@ textarea { display: block; width: 100%; resize: vertical; border: 1px solid #b9b
   .evidence-panel { grid-column: auto; }
   .card-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+#override-dialog {
+  width: min(30rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  color: var(--ink);
+  background: var(--paper, #fffdf7);
+}
+#override-dialog::backdrop { background: rgb(22 23 19 / .55); }
+#override-dialog li + li { margin-top: .4rem; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }

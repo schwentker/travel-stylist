@@ -14,7 +14,16 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from .brief import GUIDE, edit, explicit_save
-from .contracts.models import Brief, Check, Evidence, Memory, Providers, Shortlist, View
+from .contracts.models import (
+    Brief,
+    Check,
+    Evidence,
+    Memory,
+    Providers,
+    Shortlist,
+    View,
+    may_override,
+)
 from .documents import provision, seed
 from .language import parse
 from .policy import discount_gate, terms
@@ -425,7 +434,7 @@ class Workflow:
     def mutation(self, buyer, sid, req, handoff=False):
         trip = self.context(buyer, sid)
         tid = trip["id"]
-        fingerprint = hashlib.sha256(req.model_dump_json().encode()).hexdigest()
+        fingerprint = hashlib.sha256(req.model_dump_json(exclude_none=True).encode()).hexdigest()
         receipt = self.db.execute(
             "SELECT * FROM receipts WHERE session=? AND id=?", (sid, req.requestId)
         ).fetchone()
@@ -441,7 +450,7 @@ class Workflow:
         if handoff:
             result = self.handoff(trip, sid, req, receipt)
             outcome = result["status"]
-            if outcome == "ready":
+            if outcome in {"ready", "override_ready"}:
                 outcome = self.quote_receipt(result["view"], req.offerId)
         elif receipt:
             return self.view(trip, sid, "This action was already applied.")
@@ -561,6 +570,17 @@ class Workflow:
         def envelope(status, note, url=None):
             return {"status": status, "note": note, "url": url, "view": view}
 
+        def override_matches():
+            offer = next(o for o in view.shortlist.offers if o.id == req.offerId)
+            return (
+                view.mode == "live"
+                and may_override(offer)
+                and (offer.priceMinor, offer.currency)
+                == (req.override.priceMinor, req.override.currency)
+                and {c.id: c.verdict for c in offer.checks if c.verdict != "meets"}
+                == req.override.checks
+            )
+
         if receipt:
             status = receipt["outcome"]
             if status.startswith("ready:"):
@@ -572,8 +592,16 @@ class Workflow:
                 return envelope(
                     status, "Previous attempt. Review the current board before a new action."
                 )
-        if view.shortlist.winnerId != req.offerId:
-            return envelope("unavailable", "A qualifying current recommendation is required.")
+        if req.override:
+            if not override_matches():
+                return envelope(
+                    "changed", "The selected quote or checks changed. Review them before continuing."
+                )
+        elif view.shortlist.winnerId != req.offerId:
+            return envelope(
+                "unavailable",
+                "Select the recommendation or explicitly accept the selected offer’s unmet checks.",
+            )
         if trip["mode"] == "sample":
             return envelope("sample", "Fictional offer. Sample checkout ends here.")
         try:
@@ -604,6 +632,21 @@ class Workflow:
                 cohort.comparison_valid = False
         cohort.observed = now()
         view = self.view(trip, sid)
+        if req.override:
+            if not fresh.checkout or fresh.offer.available is not True:
+                return envelope("unavailable", "The verified checkout or stock is no longer available.")
+            if not override_matches():
+                return envelope(
+                    "changed", "The selected quote or checks changed. Review them before continuing."
+                )
+            return {
+                **envelope(
+                    "override_ready",
+                    "Checkout is ready for your selection with the accepted checks.",
+                    fresh.checkout,
+                ),
+                "offerId": req.offerId,
+            }
         if view.shortlist.winnerId != req.offerId or not fresh.checkout:
             return envelope("unavailable", "This offer no longer qualifies.")
         if changed:

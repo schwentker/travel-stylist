@@ -95,6 +95,17 @@ function notice(text = "", retry = null) {
   }
 }
 
+function unmetChecks(offer) {
+  return offer.checks.filter(check => check.verdict !== "meets");
+}
+
+function mayOverride(offer) {
+  return offer?.origin === "shopify_live" && offer.available === true &&
+    offer.priceMinor !== null && Boolean(offer.currency) &&
+    offer.checks.some(check => check.id === "checkout" && check.verdict === "meets") &&
+    unmetChecks(offer).length > 0;
+}
+
 function updateControls() {
   for (const id of ["start", "mode"]) get(id).disabled = busy;
   get("reopen").hidden = !view;
@@ -106,6 +117,8 @@ function updateControls() {
   get("save").disabled = !active || view.memory.state !== "none";
   const held = ["indexing", "unavailable"].includes(view?.memory.state);
   get("checkout").disabled = !active || stale || held || !selection || view.shortlist?.winnerId !== selection;
+  const selected = view?.shortlist?.offers.find(offer => offer.id === selection);
+  get("review-override").hidden = !active || stale || view.mode !== "live" || !mayOverride(selected);
   for (const radio of document.querySelectorAll('input[name="offer"]')) radio.disabled = !active;
 }
 
@@ -153,7 +166,7 @@ function renderBrief() {
 
 function renderMemory() {
   const memory = view.memory;
-  const labels = { none: "No preference saved.", indexing: "Indexing · checkout on hold", ready: "Saved preference", unavailable: "Memory unavailable · checkout on hold" };
+  const labels = { none: "No preference saved.", indexing: "Indexing · recommendation on hold", ready: "Saved preference", unavailable: "Memory unavailable · recommendation on hold" };
   const container = get("memory");
   container.replaceChildren(element("p", labels[memory.state], "quiet"));
   if (memory.ruleText) container.append(element("p", memory.ruleText));
@@ -279,9 +292,11 @@ function renderShortlist() {
   container.append(grid);
 }
 
-function apply(next) {
+function apply(next, keepSelection = false) {
+  if (!keepSelection || !next.shortlist?.offers.some(offer => offer.id === selection)) {
+    selection = next.shortlist?.winnerId ?? null;
+  }
   view = next;
-  selection = next.shortlist?.winnerId ?? null;
   stale = false;
   clearCheckout();
   renderBrief();
@@ -348,21 +363,27 @@ async function run(path, payload, type) {
       logMessage("You", payload.text);
       if (draft.value.trim() === payload.text) draft.value = "";
     }
-    apply(next);
+    apply(next, type === "handoff" && Boolean(payload.override));
     logMessage("Stylist", next.reply);
     notice("");
     if (type === "handoff") {
       showNote(data.note);
       const offer = next.shortlist?.offers.find(item => item.id === payload.offerId);
-      if (data.status === "ready" && next.mode === "live" && next.shortlist?.id === payload.shortlistId &&
-          next.shortlist.winnerId === payload.offerId && offer?.origin === "shopify_live" && offer.outcome === "meets" &&
-          offer.sellerId === requested.sellerId && offer.variantId === requested.variantId &&
-          offer.priceMinor === requested.priceMinor && offer.currency === requested.currency &&
-          !["indexing", "unavailable"].includes(next.memory.state) && https(data.url)) {
+      const ready = !payload.override && data.status === "ready" &&
+        next.shortlist?.winnerId === payload.offerId && offer?.outcome === "meets" &&
+        !["indexing", "unavailable"].includes(next.memory.state);
+      const overrideReady = payload.override && data.status === "override_ready" &&
+        data.offerId === payload.offerId && mayOverride(offer) &&
+        unmetChecks(offer).length === Object.keys(payload.override.checks).length &&
+        unmetChecks(offer).every(check => payload.override.checks[check.id] === check.verdict);
+      if ((ready || overrideReady) && next.mode === "live" && next.shortlist?.id === payload.shortlistId &&
+          offer?.origin === "shopify_live" && offer.sellerId === requested.sellerId &&
+          offer.variantId === requested.variantId && offer.priceMinor === requested.priceMinor &&
+          offer.currency === requested.currency && https(data.url)) {
         const link = externalLink("Open merchant checkout", data.url);
         link.className = "merchant-link";
         get("merchant").append(link);
-      } else if (data.status === "ready") {
+      } else if (["ready", "override_ready"].includes(data.status)) {
         showNote("Checkout link unavailable for this selection.");
       }
     }
@@ -416,8 +437,41 @@ get("message-form").addEventListener("submit", event => {
 get("save").addEventListener("click", () => turn("save_rule", rule));
 get("source").addEventListener("click", () => turn("source_jackets"));
 get("refresh").addEventListener("click", () => turn("refresh"));
-get("checkout").addEventListener("click", () => {
+function checkCheckout(override) {
   run("/api/sessions/" + encodeURIComponent(view.sessionId) + "/handoff", {
     requestId: requestId(), shortlistId: view.shortlist.id, offerId: selection,
+    ...(override && { override }),
   }, "handoff");
+}
+get("checkout").addEventListener("click", () => checkCheckout());
+const overrideDialog = get("override-dialog");
+let reviewedOverride = null;
+get("review-override").addEventListener("click", () => {
+  const offer = view.shortlist.offers.find(item => item.id === selection);
+  if (!mayOverride(offer)) return;
+  get("override-quote").textContent = offer.name + " · " + offer.seller + " · " + money(offer.priceMinor, offer.currency);
+  const checks = unmetChecks(offer);
+  const rule = get("override-rule");
+  rule.hidden = !(checks.some(check => check.id === "returns") && view.memory.ruleText);
+  rule.textContent = rule.hidden ? "" : "Saved preference: " + view.memory.ruleText;
+  get("override-checks").replaceChildren(...checks.map(check =>
+    element("li", check.label + " · " + verdictLabel[check.verdict] + ". " + check.reason)
+  ));
+  reviewedOverride = {
+    offerId: offer.id,
+    approval: {
+      priceMinor: offer.priceMinor,
+      currency: offer.currency,
+      checks: Object.fromEntries(checks.map(check => [check.id, check.verdict])),
+    },
+  };
+  overrideDialog.returnValue = "cancel";
+  overrideDialog.showModal();
+});
+overrideDialog.addEventListener("close", () => {
+  const reviewed = reviewedOverride;
+  reviewedOverride = null;
+  if (overrideDialog.returnValue !== "approve" || !reviewed || reviewed.offerId !== selection ||
+      busy || stale || view.mode !== mode.value) return;
+  checkCheckout(reviewed.approval);
 });

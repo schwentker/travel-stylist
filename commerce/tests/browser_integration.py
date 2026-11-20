@@ -75,6 +75,8 @@ def inspect_requests(page, url, errors):
             if req.url.endswith("/turns")
             else {"requestId", "offerId", "shortlistId"}
         )
+        if expected == {"requestId", "offerId", "shortlistId"} and "override" in body:
+            expected.add("override")
         if set(body) != expected:
             errors.append("unexpected browser payload fields")
 
@@ -301,6 +303,43 @@ def synthetic_checkout(page, url, service):
         )
 
 
+def synthetic_override(page, url, service):
+    row = SampleCatalog().search(None)[0]
+    row.offer.origin = row.item.origin = "shopify_live"
+    row.item.quote = "A navy jacket with brass buttons."
+    row.policy = None
+    row.checkout = "https://merchant.example/buy/jacket"
+    catalog = service.catalog["live"]
+    with (
+        patch.object(service, "language", return_value=None),
+        patch.dict(service.judge, {"live": SampleJudgment()}),
+        patch.object(catalog, "search_batch", side_effect=lambda *_: ([deepcopy(row)], None)),
+        patch.object(catalog, "lookup", side_effect=lambda *_: deepcopy(row)),
+    ):
+        view = begin(page, url, "live")
+        assert view["shortlist"]["winnerId"] is None
+        review = page.get_by_role("button", name="Review checkout override")
+        expect(review).to_be_hidden()
+        page.get_by_role("radio").check()
+        review.click()
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_contain_text("Formality · Unknown")
+        dialog.get_by_role("button", name="Cancel").click()
+        expect(page.locator("#merchant a")).to_have_count(0)
+        review.click()
+        with page.expect_response(lambda r: r.url.endswith("/handoff")) as response:
+            dialog.get_by_role("button", name="Accept checks and verify checkout").click()
+        assert response.value.json()["status"] == "override_ready"
+        expect(page.get_by_role("link", name="Open merchant checkout")).to_have_attribute(
+            "href", row.checkout
+        )
+        expect(page.get_by_role("radio")).to_be_checked()
+        expect(page.locator("#candidate-summary")).to_contain_text("No eligible recommendation")
+        action(page, "refresh")
+        expect(page.locator("#merchant a")).to_have_count(0)
+    print("PASS buyer override confirmation, non-winner handoff and link clearance")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true")
@@ -309,7 +348,11 @@ def main():
     errors = []
     with serve(service) as url, sync_playwright() as driver:
         browser = driver.chromium.launch(executable_path=shutil.which("chromium"))
-        flows = [sample_flow, sparse_boards] + ([live_flow] if args.live else []) + [synthetic_checkout]
+        flows = (
+            [sample_flow, sparse_boards]
+            + ([live_flow] if args.live else [])
+            + [synthetic_checkout, synthetic_override]
+        )
         for flow in flows:
             page = browser.new_page(viewport={"width": 1440, "height": 950})
             inspect_requests(page, url, errors)
