@@ -24,6 +24,7 @@ from .contracts.models import (
     View,
     may_override,
 )
+from .cloud_store import CloudStore
 from .documents import provision, seed
 from .language import parse
 from .policy import discount_gate, terms
@@ -72,16 +73,20 @@ class Workflow:
 
     def connect(self):
         if self.db is None:
-            Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-            self.db = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
-            self.db.row_factory = sqlite3.Row
-            self.db.executescript("""
+            if os.environ.get("COMMERCE_STORAGE") == "cloudflare":
+                db = CloudStore()
+            else:
+                Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+                db = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
+                db.row_factory = sqlite3.Row
+            db.executescript("""
               CREATE TABLE IF NOT EXISTS trips(id TEXT PRIMARY KEY, buyer TEXT, mode TEXT, brief TEXT, searched INTEGER DEFAULT 0);
               CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, trip TEXT);
               CREATE TABLE IF NOT EXISTS sources(binding TEXT PRIMARY KEY, content TEXT, node TEXT);
               CREATE TABLE IF NOT EXISTS rules(buyer TEXT, mode TEXT, binding TEXT UNIQUE, content TEXT, node TEXT, PRIMARY KEY(buyer,mode));
               CREATE TABLE IF NOT EXISTS receipts(session TEXT, id TEXT, fingerprint TEXT, outcome TEXT, PRIMARY KEY(session,id));
             """)
+            self.db = db
         # Prune all expired cohorts even if their original buyer never returns.
         for key in [k for k, v in self.sets.items() if v.expires <= time.monotonic()]:
             del self.sets[key]
@@ -443,7 +448,7 @@ class Workflow:
         if (
             self.db.execute(
                 "SELECT id FROM sessions WHERE trip=? ORDER BY rowid DESC LIMIT 1", (tid,)
-            ).fetchone()[0]
+            ).fetchone()["id"]
             != sid
         ):
             fail(409, "SESSION_SUPERSEDED", "Use the newest conversation for this trip.")

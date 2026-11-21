@@ -1,3 +1,6 @@
 __pycache__/
 runtime/
 .ruff_cache/
+
+.wrangler/
+.dev.vars*
