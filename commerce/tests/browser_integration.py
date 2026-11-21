@@ -307,6 +307,7 @@ def synthetic_override(page, url, service):
     row = SampleCatalog().search(None)[0]
     row.offer.origin = row.item.origin = "shopify_live"
     row.item.quote = "A navy jacket with brass buttons."
+    row.offer.priceMinor = 31000
     row.policy = None
     row.checkout = "https://merchant.example/buy/jacket"
     catalog = service.catalog["live"]
@@ -320,13 +321,18 @@ def synthetic_override(page, url, service):
         assert view["shortlist"]["winnerId"] is None
         review = page.get_by_role("button", name="Review checkout override")
         expect(review).to_be_hidden()
-        page.get_by_role("radio").check()
-        review.click()
+        expect(page.get_by_role("radio")).not_to_be_checked()
+        inline = page.get_by_role("button", name="Override formality", exact=True)
+        inline.click()
         dialog = page.get_by_role("dialog")
+        expect(dialog.get_by_role("checkbox", name="Formality", exact=False)).to_be_checked()
+        expect(dialog.get_by_role("button", name="Accept checks and verify checkout")).to_be_disabled()
         expect(dialog).to_contain_text("Formality · Unknown")
         dialog.get_by_role("button", name="Cancel").click()
         expect(page.locator("#merchant a")).to_have_count(0)
         review.click()
+        for box in dialog.get_by_role("checkbox").all():
+            box.check()
         with page.expect_response(lambda r: r.url.endswith("/handoff")) as response:
             dialog.get_by_role("button", name="Accept checks and verify checkout").click()
         assert response.value.json()["status"] == "override_ready"

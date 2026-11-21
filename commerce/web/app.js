@@ -119,6 +119,7 @@ function updateControls() {
   get("checkout").disabled = !active || stale || held || !selection || view.shortlist?.winnerId !== selection;
   const selected = view?.shortlist?.offers.find(offer => offer.id === selection);
   get("review-override").hidden = !active || stale || view.mode !== "live" || !mayOverride(selected);
+  for (const button of document.querySelectorAll(".check-override")) button.disabled = !active || stale;
   for (const radio of document.querySelectorAll('input[name="offer"]')) radio.disabled = !active;
 }
 
@@ -252,6 +253,7 @@ function card(offer, winner) {
   identity.append(element("summary", "Variant details"), facts([["Seller ID", offer.sellerId], ["Variant ID", offer.variantId], ["Market", offer.market]]));
   body.append(identity);
   const checks = element("ul", undefined, "checks");
+  const canOverride = view.mode === "live" && mayOverride(offer);
   for (const check of offer.checks) {
     const item = element("li");
     const button = element("button");
@@ -259,6 +261,16 @@ function card(offer, winner) {
     button.append(element("span", check.label), badge(verdictLabel[check.verdict], check.verdict));
     button.addEventListener("click", () => showEvidence(offer.seller + " · " + check.label, check.reason, check.evidenceIds, button));
     item.append(button);
+    if (canOverride && check.verdict !== "meets") {
+      const override = element("button", "Override " + check.label.toLowerCase(), "check-override");
+      override.type = "button";
+      override.setAttribute("aria-haspopup", "dialog");
+      override.addEventListener("click", () => {
+        radio.click();
+        reviewOverride(offer, check.id);
+      });
+      item.append(override);
+    }
     checks.append(item);
   }
   body.append(checks);
@@ -446,17 +458,33 @@ function checkCheckout(override) {
 get("checkout").addEventListener("click", () => checkCheckout());
 const overrideDialog = get("override-dialog");
 let reviewedOverride = null;
-get("review-override").addEventListener("click", () => {
-  const offer = view.shortlist.offers.find(item => item.id === selection);
-  if (!mayOverride(offer)) return;
+function reviewOverride(offer, chosenCheck) {
+  if (!mayOverride(offer) || busy || stale || view.mode !== mode.value) return;
+  clearCheckout();
   get("override-quote").textContent = offer.name + " · " + offer.seller + " · " + money(offer.priceMinor, offer.currency);
   const checks = unmetChecks(offer);
   const rule = get("override-rule");
   rule.hidden = !(checks.some(check => check.id === "returns") && view.memory.ruleText);
   rule.textContent = rule.hidden ? "" : "Saved preference: " + view.memory.ruleText;
-  get("override-checks").replaceChildren(...checks.map(check =>
-    element("li", check.label + " · " + verdictLabel[check.verdict] + ". " + check.reason)
-  ));
+  const checkList = get("override-checks");
+  const multiple = checks.length > 1;
+  get("override-instructions").hidden = !multiple;
+  checkList.replaceChildren(...checks.map(check => {
+    const item = element("li");
+    const description = check.label + " · " + verdictLabel[check.verdict] + ". " + check.reason;
+    if (multiple) {
+      const label = element("label");
+      const input = element("input");
+      input.type = "checkbox";
+      input.checked = check.id === chosenCheck;
+      label.append(input, document.createTextNode(" " + description));
+      item.append(label);
+    } else {
+      item.textContent = description;
+    }
+    return item;
+  }));
+  updateOverrideApproval();
   reviewedOverride = {
     offerId: offer.id,
     approval: {
@@ -467,6 +495,15 @@ get("review-override").addEventListener("click", () => {
   };
   overrideDialog.returnValue = "cancel";
   overrideDialog.showModal();
+}
+
+function updateOverrideApproval() {
+  get("approve-override").disabled = Boolean(get("override-checks").querySelector("input:not(:checked)"));
+}
+
+get("override-checks").addEventListener("change", updateOverrideApproval);
+get("review-override").addEventListener("click", () => {
+  reviewOverride(view.shortlist.offers.find(item => item.id === selection));
 });
 overrideDialog.addEventListener("close", () => {
   const reviewed = reviewedOverride;
