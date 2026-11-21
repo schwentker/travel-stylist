@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -48,6 +49,7 @@ def fixture(name: str):
     return json.loads((EXAMPLES / f"{name}.json").read_text())
 
 
+load_dotenv(ROOT.parent / ".env", override=False)
 app.state.workflow = Workflow()
 
 
