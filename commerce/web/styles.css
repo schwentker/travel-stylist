@@ -88,6 +88,8 @@ textarea { display: block; width: 100%; resize: vertical; border: 1px solid #b9b
 .offer-select { display: flex; align-items: center; gap: .3rem; font-size: .8rem; cursor: pointer; }
 .checks { margin: .15rem 0 0; list-style: none; padding: 0; }
 .checks button { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .25rem; width: 100%; text-align: start; padding: .28rem; border-color: transparent; border-radius: 0; border-top: 1px solid var(--line); font-size: .78rem; }
+.checks .check-override { width: auto; margin: 0 0 .35rem .28rem; padding: .3rem .45rem; border: 1px solid var(--line); border-radius: .3rem; text-decoration: underline; }
+
 [data-verdict="meets"] { background: #e7eddf; color: #39552b; }
 [data-verdict="fails"] { background: #f5e0d9; color: #843a2c; }
 [data-verdict="unknown"] { background: #f3e9d1; color: #674b1f; }
