@@ -1,0 +1,10 @@
+**
+!requirements.txt
+!*.py
+!contracts/
+!contracts/**
+!fixtures/
+!fixtures/**
+!web/
+!web/**
+**/__pycache__/

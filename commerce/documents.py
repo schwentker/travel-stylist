@@ -22,7 +22,8 @@ def provision(db, adapter, buyer, mode, doc):
     ]
     binding = hashlib.sha256(json.dumps(fields).encode()).hexdigest()
     db.execute("INSERT OR IGNORE INTO sources(binding) VALUES(?)", (binding,))
-    content, node = db.execute("SELECT content,node FROM sources WHERE binding=?", (binding,)).fetchone()
+    source = db.execute("SELECT content,node FROM sources WHERE binding=?", (binding,)).fetchone()
+    content, node = source["content"], source["node"]
     if not content:
         content, node = adapter.bind(binding, doc["quote"])
         db.execute("UPDATE sources SET content=?,node=? WHERE binding=?", (content, node, binding))

@@ -406,13 +406,13 @@ async function run(path, payload, type) {
 
 function turn(action, text = "") {
   if (!view) return;
-  return run("/api/sessions/" + encodeURIComponent(view.sessionId) + "/turns",
+  return run("api/sessions/" + encodeURIComponent(view.sessionId) + "/turns",
     { requestId: requestId(), action, text }, "turn");
 }
 
 get("session-form").addEventListener("submit", event => {
   event.preventDefault();
-  run("/api/sessions", { tripId: null, mode: mode.value }, "session");
+  run("api/sessions", { tripId: null, mode: mode.value }, "session");
 });
 mode.addEventListener("change", () => {
   clearCheckout();
@@ -423,7 +423,7 @@ mode.addEventListener("change", () => {
   }
   updateControls();
 });
-get("reopen").addEventListener("click", () => run("/api/sessions", { tripId: view.tripId, mode: view.mode }, "session"));
+get("reopen").addEventListener("click", () => run("api/sessions", { tripId: view.tripId, mode: view.mode }, "session"));
 get("example").addEventListener("click", () => {
   if (!draft.value || draft.value === sampleBrief || window.confirm("Replace your draft with the sample wording?")) {
     draft.value = sampleBrief;
@@ -438,7 +438,7 @@ get("save").addEventListener("click", () => turn("save_rule", rule));
 get("source").addEventListener("click", () => turn("source_jackets"));
 get("refresh").addEventListener("click", () => turn("refresh"));
 function checkCheckout(override) {
-  run("/api/sessions/" + encodeURIComponent(view.sessionId) + "/handoff", {
+  run("api/sessions/" + encodeURIComponent(view.sessionId) + "/handoff", {
     requestId: requestId(), shortlistId: view.shortlist.id, offerId: selection,
     ...(override && { override }),
   }, "handoff");
