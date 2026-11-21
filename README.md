@@ -36,6 +36,8 @@ python -m pip install -r commerce/requirements.txt
 python -m uvicorn commerce.app:app --port 8000
 ```
 
+For Live mode, place `SENSO_API_KEY` and `TYPESAFE_API_KEY` in a `.env` file at the repository root. The app reads it at startup. Sample mode works without keys.
+
 Open [localhost:8000](http://127.0.0.1:8000). FastAPI serves the browser app and API from the same origin. SQLite persists the trip brief and buyer preferences. Live offers and checkout URLs are held in short-lived task memory.
 
 [Backend and live-mode setup](commerce/README.md) · [Frozen API v1](commerce/contracts/v1/openapi.json) · [Acceptance cases](commerce-plan/02-contract-and-cases.md) · [Project plan](commerce-plan/01-master-plan.md)
