@@ -379,7 +379,13 @@ async function run(path, payload, type) {
     logMessage("Stylist", next.reply);
     notice("");
     if (type === "handoff") {
-      showNote(data.note);
+      const winnerId = next.shortlist?.winnerId;
+      const winner = next.shortlist?.offers.find(item => item.id === winnerId);
+      if (!payload.override && winner && winnerId !== payload.offerId) {
+        showNote(winner.seller + " is now recommended and selected. Review the offer, then click Check checkout again.");
+      } else {
+        showNote(data.note);
+      }
       const offer = next.shortlist?.offers.find(item => item.id === payload.offerId);
       const ready = !payload.override && data.status === "ready" &&
         next.shortlist?.winnerId === payload.offerId && offer?.outcome === "meets" &&
