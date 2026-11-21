@@ -34,3 +34,11 @@ npx --yes wrangler@4.166.0 login
 The Worker serves the frontend under `/travel-stylist/` and forwards API calls to one FastAPI container. Its private database connection uses Durable Object SQLite so trips and preference bindings survive container restarts. Live shortlists expire after 30 minutes or a backend restart. The deployment script picks up configured Senso, Jev and Shopify credentials from the shell or the root `.env` and uploads them as Worker secrets. Sample mode works without provider credentials.
 
 The public Ask profile is a separate Hugo asset. Publish the generated public JSON as `static/travel-stylist/ucp.json` in the sandboxlabsai repository. The Worker routes leave `https://sandboxlabs.ai/travel-stylist/ucp.json` to Pages. Keep the signing PEM in your local private key directory for the signed probe.
+
+### Host FastAPI on Render
+
+To deploy into an existing Render project, create a **Web Service** from the Travel Stylist repo on the `main` branch. Select **Docker**, use `./commerce/Dockerfile` for Dockerfile Path and `./commerce` for Docker Build Context Directory. Set the health check path to `/` and set `COMMERCE_DB=/tmp/travel-stylist.sqlite3` in Environment. Render builds the image from GitHub. The root `render.yaml` provides the same settings when creating a Blueprint.
+
+For Live mode, set `SENSO_API_KEY` and `TYPESAFE_API_KEY` in the Render service’s Environment. `SHOPIFY_CATALOG_TOKEN` is optional. The Free plan can sleep and uses ephemeral disk, so trip and preference bindings can be lost on a restart, spin-down, or redeploy. For durable storage, use a paid service with a persistent disk, for example at `/var/data`, and set `COMMERCE_DB=/var/data/travel-stylist.sqlite3`. Keep the service at one instance.
+
+For the public short URL, set the Sandbox Labs Cloudflare Pages project's `TRAVEL_STYLIST_ORIGIN` variable to the Render service's HTTPS origin if it differs from `https://travel-stylist.onrender.com`. The Pages function forwards the app and API under `/travel-stylist/`. Hugo can serve the optional public UCP profile alongside it.
