@@ -358,6 +358,7 @@ def main():
             [sample_flow, sparse_boards]
             + ([live_flow] if args.live else [])
             + [synthetic_checkout, synthetic_override]
+            + [sponsored_mock_flow]
         )
         for flow in flows:
             page = browser.new_page(viewport={"width": 1440, "height": 950})
@@ -370,6 +371,149 @@ def main():
         browser.close()
     assert not errors, errors
     print("PASS browser request scope and page errors")
+
+
+def _placement_journey(page, url, *, show_units):
+    """Capture decisions and transcript lengths from actual responses and rendered turns."""
+    slot = page.locator("#sponsored-slot")
+    unit = page.locator(".sponsored-unit")
+    transcript = page.locator("#transcript li")
+    states = []
+    page.goto(url)
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(slot).to_have_count(1)
+    expect(slot).to_be_hidden()
+    assert slot.evaluate("el => el.childElementCount") == 0
+    page.locator("#mode").select_option("sample")
+    for button in ("start", "send", "source", "save", "reopen", "checkout"):
+        if button == "send":
+            page.locator("#example").press("Enter")
+        response = action(page, button)
+        assert response.ok, (button, response.status)
+        data = response.json()
+        view = data["view"] if button == "checkout" else data
+        winner = (view["shortlist"] or {}).get("winnerId")
+        states.append((button, winner, transcript.count()))
+        if button == "source":
+            assert winner == "offer-a"
+        elif button in ("reopen", "checkout"):
+            assert winner == "offer-b"
+        if show_units and button in ("send", "source", "save"):
+            expect(unit).to_have_count(1)
+            expect(slot.locator(".sponsored-unit")).to_be_visible()
+            expect(unit).to_contain_text("Sponsored")
+            expect(unit).to_contain_text("Not affiliated with or endorsed by Koah")
+            assert slot.evaluate("el => !el.closest('#transcript, #shortlist, #evidence, #merchant')")
+            assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+        else:
+            expect(slot).to_be_hidden()
+            if not show_units:
+                expect(unit).to_have_count(0)
+    return states
+
+
+def _compare_sponsored_runs(page, url):
+    from itertools import count
+    from uuid import UUID
+
+    results = []
+    origin = urlsplit(url)
+    for flag in ("", "?ads=mock"):
+        # Real trips and shortlists get new UUIDs. Give each run the same clean DB
+        # and ID sequence so the comparison can retain every field except requestId.
+        workflow = Workflow(":memory:")
+        serial = count(1)
+        requests = []
+        foreign = []
+
+        def capture(request):
+            target = urlsplit(request.url)
+            if (target.scheme, target.netloc) != (origin.scheme, origin.netloc):
+                foreign.append(request.url)
+            if target.path.startswith("/api/"):
+                body = request.post_data_json
+                if isinstance(body, dict):
+                    body = {k: v for k, v in body.items() if k != "requestId"}
+                requests.append((request.method, target.path, target.query, body))
+
+        page.on("request", capture)
+        try:
+            with (
+                patch.object(app.state, "workflow", workflow),
+                patch("commerce.workflow.uuid4", side_effect=lambda: UUID(int=next(serial))),
+                patch.object(workflow, "language", return_value=None),
+            ):
+                states = _placement_journey(page, url + "/" + flag, show_units=bool(flag))
+                assert not foreign, foreign
+                assert len(requests) == len(states), requests
+                results.append((states, requests))
+        finally:
+            page.remove_listener("request", capture)
+            if workflow.db is not None:
+                workflow.db.close()
+    assert results[0] == results[1], ("flag changed decisions, transcript or API traffic", results)
+
+
+def _sponsored_fixture_failures(page, url):
+    from playwright.sync_api import TimeoutError as BrowserTimeout
+
+    failures = []
+    for status, body in ((500, ""), (200, "export default [;")):
+        page.context.clear_cookies()  # A new sample buyer for each fault.
+        intercepted = []
+        api_requests = []
+
+        def fail_module(route):
+            intercepted.append(route.request.url)
+            route.fulfill(status=status, content_type="text/javascript", body=body)
+
+        def capture(request):
+            if urlsplit(request.url).path.startswith("/api/"):
+                api_requests.append(request.url)
+
+        page.route("**/sponsored-ads.js", fail_module)
+        page.on("request", capture)
+        try:
+            _placement_journey(page, url + "/?ads=mock", show_units=False)
+            assert intercepted, "fault injection never reached the fixture module"
+        except BrowserTimeout as exc:
+            if intercepted and not api_requests:
+                failures.append(f"KNOWN FAILURE (Part A blocker): fixture HTTP {status} "
+                                f"prevented core startup before the first API request: {exc}")
+            else:
+                failures.append(f"fixture HTTP {status}: {exc}")
+        except AssertionError as exc:
+            failures.append(f"fixture HTTP {status}: {exc}")
+        finally:
+            page.unroute("**/sponsored-ads.js", fail_module)
+            page.remove_listener("request", capture)
+    assert not failures, "\n".join(failures)
+
+
+def sponsored_mock_flow(page, url, service):
+    _compare_sponsored_runs(page, url)
+    _sponsored_fixture_failures(page, url)
+    # Switching mode must hide a visible Sample placement before Live starts.
+    page.context.clear_cookies()
+    page.goto(url + "/?ads=mock")
+    page.locator("#mode").select_option("sample")
+    assert action(page, "start").ok
+    page.locator("#example").press("Enter")
+    assert action(page, "send").ok
+    slot = page.locator("#sponsored-slot")
+    expect(slot).to_be_visible()
+    page.locator("#mode").select_option("live")
+    expect(slot).to_be_hidden()
+    assert action(page, "start").ok
+    expect(slot).to_be_hidden()
+    with patch.object(service, "language", return_value=None):
+        page.locator("#example").press("Enter")
+        assert action(page, "send").ok
+    expect(slot).to_be_hidden()
+    with patch.object(service.catalog["live"], "search_batch", return_value=([], None)):
+        assert action(page, "source").ok
+    expect(slot).to_be_hidden()
+    print("PASS sponsored separation, fixture failure isolation and Live gating")
 
 
 if __name__ == "__main__":

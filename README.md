@@ -41,3 +41,9 @@ For Live mode, place `SENSO_API_KEY` and `TYPESAFE_API_KEY` in a `.env` file at 
 Open [localhost:8000](http://127.0.0.1:8000). FastAPI serves the browser app and API from the same origin. SQLite persists the trip brief and buyer preferences. Live offers and checkout URLs are held in short-lived task memory.
 
 [Backend and live-mode setup](commerce/README.md) · [Frozen API v1](commerce/contracts/v1/openapi.json) · [Acceptance cases](commerce-plan/02-contract-and-cases.md) · [Project plan](commerce-plan/01-master-plan.md)
+
+## Ad placement mock
+
+[Open the Sample demo with mock placements](https://sandboxlabs.ai/travel-stylist/?ads=mock). Choose Sample, send the trip brief, then source jackets to see a fictional travel offer followed by a poll. The placement uses local sample data so you can compare the same jacket shortlist and inspect the same seller evidence with the flag on or off. No advertiser receives the trip details or poll vote.
+
+Not affiliated with or endorsed by Koah.
