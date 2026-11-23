@@ -15,15 +15,13 @@ let stale = false;
 let ads = null;
 let pendingAdContext = null;
 
-if (new URLSearchParams(location.search).get("ads") === "mock") {
-  import("./sponsored.js")
-    .then(module => {
-      module.initSponsored(get("sponsored-slot"));
-      ads = module;
-      if (pendingAdContext) notifyAds(loaded => loaded.onTurn(pendingAdContext));
-    })
-    .catch(error => console.warn("[sponsored-mock]", error));
-}
+import("./sponsored.js")
+  .then(module => {
+    module.initSponsored(get("sponsored-slot"));
+    ads = module;
+    if (pendingAdContext) notifyAds(loaded => loaded.onTurn(pendingAdContext));
+  })
+  .catch(error => console.warn("[sponsored-mock]", error));
 
 function adContext(payload, next, type) {
   const brief = next.brief ? Object.freeze({

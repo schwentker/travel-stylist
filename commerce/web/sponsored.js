@@ -1,12 +1,11 @@
-// In-chat ad placement mock. Loaded only by a dynamic import when ?ads=mock is set.
+// In-chat ad placement mock. Loaded by a dynamic import so a load failure cannot affect the app.
 // Reads a frozen context of primitives built by app.js; never touches view, fetch or storage.
-// Matching is a deterministic local stand-in for Koah's server-side intent matching:
+// Matching is a deterministic local stand-in for server-side intent matching:
 // keywords in { question, answer } first, then the trip brief.
 import ads from "./sponsored-ads.js";
 
-const flagOn = new URLSearchParams(location.search).get("ads") === "mock";
 const turnFor = { message: "brief", source_jackets: "shortlist" };
-const caption = "Concept mock of an in-chat ad unit. Fictional advertiser. Not affiliated with or endorsed by Koah.";
+const caption = "Concept mock of an in-chat ad unit. Fictional advertiser.";
 const neverRead = "Never read: your saved buying rules, the jacket shortlist, past sessions. This placement uses no cookies.";
 
 let slot = null;
@@ -16,7 +15,7 @@ let epoch = 0;
 let session = null;
 const seen = new Set();
 
-const enabled = () => flagOn && !!slot;
+const enabled = () => !!slot;
 
 function node(tag, className, text) {
   const el = document.createElement(tag);

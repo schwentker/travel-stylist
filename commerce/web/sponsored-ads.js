@@ -1,4 +1,4 @@
-// Fixture ads for the in-chat placement mock (?ads=mock, any mode).
+// Fixture ads for the in-chat placement mock (any mode).
 // All advertisers are fictional. Domains use the reserved .example TLD (RFC 2606).
 // Copy limits: title <= 60, body <= 90, cta <= 16, poll question <= 60.
 export default [
