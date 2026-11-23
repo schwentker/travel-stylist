@@ -373,6 +373,44 @@ def main():
     print("PASS browser request scope and page errors")
 
 
+def _check_unit(page, slot, expected_format):
+    unit = slot.locator(".sponsored-unit")
+    expect(page.locator(".sponsored-unit")).to_have_count(1)
+    expect(unit).to_have_attribute("data-format", expected_format)
+    expect(unit.locator(".sponsored-label")).to_be_visible()
+    expect(unit.locator(".sponsored-label")).to_have_text("Sponsored")
+    caption = unit.locator(".sponsored-caption")
+    expect(caption).to_be_visible()
+    expect(caption).to_contain_text("Not affiliated with or endorsed by Koah")
+    expect(unit.locator(".sponsored-hide")).to_be_visible()
+    assert slot.evaluate("""el => el.previousElementSibling?.id === "transcript"
+        && el.nextElementSibling?.id === "message-form"
+        && !el.closest("#shortlist, #evidence, #merchant, #override-dialog, form")""")
+    assert unit.locator("button").evaluate_all("""buttons => buttons.every(b =>
+        b.getAttribute("type") === "button" && !b.form && !b.closest("form"))""")
+    assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+    assert page.locator("#transcript").evaluate("""el =>
+        el.clientHeight >= 8 * parseFloat(getComputedStyle(document.documentElement).fontSize)""")
+    return unit
+
+
+def _exercise_card(slot):
+    why = slot.locator(".sponsored-why")
+    detail = slot.locator("#sponsored-why-text")
+    expect(why).to_have_attribute("aria-expanded", "false")
+    expect(detail).to_be_hidden()
+    why.click()
+    expect(why).to_have_attribute("aria-expanded", "true")
+    expect(detail).to_be_visible()
+    expect(detail).to_contain_text("Never read")
+    why.click()
+    expect(why).to_have_attribute("aria-expanded", "false")
+    expect(detail).to_be_hidden()
+    slot.locator(".sponsored-cta").click()
+    expect(slot.locator(".sponsored-unit")).to_have_attribute("data-cta-clicked", "true")
+    expect(slot.locator(".sponsored-demo-note")).to_be_visible()
+
+
 def _placement_journey(page, url, *, show_units):
     """Capture decisions and transcript lengths from actual responses and rendered turns."""
     slot = page.locator("#sponsored-slot")
@@ -393,20 +431,26 @@ def _placement_journey(page, url, *, show_units):
         data = response.json()
         view = data["view"] if button == "checkout" else data
         winner = (view["shortlist"] or {}).get("winnerId")
-        states.append((button, winner, transcript.count()))
+        states.append((button, winner, transcript.count(), page.evaluate("window.formSubmits")))
         if button == "source":
             assert winner == "offer-a"
         elif button in ("reopen", "checkout"):
             assert winner == "offer-b"
-        if show_units and button in ("send", "source", "save"):
-            expect(unit).to_have_count(1)
-            expect(slot.locator(".sponsored-unit")).to_be_visible()
-            expect(unit).to_contain_text("Sponsored")
-            expect(unit).to_contain_text("Not affiliated with or endorsed by Koah")
-            assert slot.evaluate("el => !el.closest('#transcript, #shortlist, #evidence, #merchant')")
-            assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+        if show_units and button == "send":
+            _check_unit(page, slot, "action-card")
+            _exercise_card(slot)
+        elif show_units and button in ("source", "save"):
+            poll = _check_unit(page, slot, "poll")
+            if button == "source":
+                expect(poll.locator(".sponsored-poll-thanks")).to_be_hidden()
+                poll.locator(".sponsored-poll-option").first.click()
+            # A save must preserve the voted poll.
+            expect(poll).to_have_attribute("data-voted", "true")
+            expect(poll.locator(".sponsored-poll-thanks")).to_be_visible()
         else:
             expect(slot).to_be_hidden()
+            if button == "start":
+                assert slot.evaluate("el => el.childElementCount") == 0
             if not show_units:
                 expect(unit).to_have_count(0)
     return states
@@ -417,19 +461,19 @@ def _compare_sponsored_runs(page, url):
     from uuid import UUID
 
     results = []
-    origin = urlsplit(url)
     for flag in ("", "?ads=mock"):
         # Real trips and shortlists get new UUIDs. Give each run the same clean DB
         # and ID sequence so the comparison can retain every field except requestId.
         workflow = Workflow(":memory:")
         serial = count(1)
         requests = []
-        foreign = []
+        modules = []
 
         def capture(request):
             target = urlsplit(request.url)
-            if (target.scheme, target.netloc) != (origin.scheme, origin.netloc):
-                foreign.append(request.url)
+            filename = target.path.rsplit("/", 1)[-1]
+            if filename.startswith("sponsored") and filename.endswith(".js"):
+                modules.append(filename)
             if target.path.startswith("/api/"):
                 body = request.post_data_json
                 if isinstance(body, dict):
@@ -444,7 +488,10 @@ def _compare_sponsored_runs(page, url):
                 patch.object(workflow, "language", return_value=None),
             ):
                 states = _placement_journey(page, url + "/" + flag, show_units=bool(flag))
-                assert not foreign, foreign
+                if flag:
+                    assert {"sponsored.js", "sponsored-ads.js"} <= set(modules), modules
+                else:
+                    assert not modules, modules
                 assert len(requests) == len(states), requests
                 results.append((states, requests))
         finally:
@@ -454,45 +501,94 @@ def _compare_sponsored_runs(page, url):
     assert results[0] == results[1], ("flag changed decisions, transcript or API traffic", results)
 
 
-def _sponsored_fixture_failures(page, url):
+def _sponsored_module_failures(page, url, service):
     from playwright.sync_api import TimeoutError as BrowserTimeout
 
+    faults = ((404, "text/plain", ""), (500, "text/plain", ""),
+              (200, "text/html", "<!doctype html><title>Fallback</title>"),
+              (200, "text/javascript", "export default [;"))
+    # The final slot could be hidden even if an earlier turn briefly displayed it.
+    page.add_init_script("""window.sponsoredSlotExposed = false;
+        new MutationObserver(records => {
+            const slot = document.getElementById("sponsored-slot");
+            if (slot && (!slot.hidden || records.some(record =>
+                record.target === slot && record.type === "attributes" &&
+                record.attributeName === "hidden" && record.oldValue === null))) {
+                window.sponsoredSlotExposed = true;
+            }
+        }).observe(document, {subtree: true, childList: true, attributes: true,
+            attributeFilter: ["hidden"], attributeOldValue: true});""")
     failures = []
-    for status, body in ((500, ""), (200, "export default [;")):
-        page.context.clear_cookies()  # A new sample buyer for each fault.
-        intercepted = []
-        api_requests = []
+    for module in ("sponsored.js", "sponsored-ads.js"):
+        pattern = "**/" + module
+        for status, mime, body in faults:
+            page.context.clear_cookies()
+            intercepted = []
 
-        def fail_module(route):
-            intercepted.append(route.request.url)
-            route.fulfill(status=status, content_type="text/javascript", body=body)
+            def fail_module(route):
+                intercepted.append(route.request.url)
+                route.fulfill(status=status, content_type=mime, body=body)
 
-        def capture(request):
-            if urlsplit(request.url).path.startswith("/api/"):
-                api_requests.append(request.url)
-
-        page.route("**/sponsored-ads.js", fail_module)
-        page.on("request", capture)
-        try:
-            _placement_journey(page, url + "/?ads=mock", show_units=False)
-            assert intercepted, "fault injection never reached the fixture module"
-        except BrowserTimeout as exc:
-            if intercepted and not api_requests:
-                failures.append(f"KNOWN FAILURE (Part A blocker): fixture HTTP {status} "
-                                f"prevented core startup before the first API request: {exc}")
-            else:
-                failures.append(f"fixture HTTP {status}: {exc}")
-        except AssertionError as exc:
-            failures.append(f"fixture HTTP {status}: {exc}")
-        finally:
-            page.unroute("**/sponsored-ads.js", fail_module)
-            page.remove_listener("request", capture)
+            page.route(pattern, fail_module)
+            try:
+                sample_flow(page, url + "/?ads=mock", service)
+                expect(page.locator("#sponsored-slot")).to_have_count(1)
+                expect(page.locator("#sponsored-slot")).to_be_hidden()
+                assert not page.evaluate("window.sponsoredSlotExposed"), "slot became visible"
+                assert intercepted, "fault injection did not reach the target"
+            except (BrowserTimeout, AssertionError) as exc:
+                failures.append(f"Part A isolation blocker: {module} {status} {mime}: {exc}")
+            finally:
+                page.unroute(pattern, fail_module)
     assert not failures, "\n".join(failures)
 
 
+def _checkout_and_dismissal(page, url):
+    page.context.clear_cookies()
+    begin(page, url + "/?ads=mock", "sample")
+    slot = page.locator("#sponsored-slot")
+    expect(slot.locator(".sponsored-unit")).to_have_attribute("data-format", "poll")
+    # A question about an existing jacket retains the shortlist and allows checkout.
+    page.locator("#draft").fill("Why is this jacket recommended?")
+    assert action(page, "send").ok
+    expect(slot.locator(".sponsored-unit")).to_have_attribute("data-format", "action-card")
+    assert action(page, "checkout").json()["status"] == "sample"
+    expect(slot).to_be_hidden()
+    assert action(page, "source").ok
+    expect(slot).to_be_hidden()
+
+    assert action(page, "reopen").ok
+    expect(slot).to_be_hidden()
+    assert action(page, "source").ok
+    submits = page.evaluate("window.formSubmits")
+    slot.locator(".sponsored-hide").click()
+    assert page.evaluate("window.formSubmits") == submits
+    expect(slot).to_be_hidden()
+    expect(page.locator("#draft")).to_be_focused()
+    assert action(page, "reopen").ok
+    page.locator("#example").press("Enter")
+    assert action(page, "send").ok
+    expect(slot).to_be_hidden()
+    assert action(page, "source").ok
+    expect(slot).to_be_hidden()
+
+
 def sponsored_mock_flow(page, url, service):
+    # Includes canceled submissions, all resource types, and popups opened by controls.
+    page.add_init_script("""window.formSubmits = 0;
+        document.addEventListener("submit", () => window.formSubmits++, true);""")
+    foreign = []
+    origin = urlsplit(url)
+
+    def inspect_origin(request):
+        target = urlsplit(request.url)
+        if (target.scheme, target.netloc) != (origin.scheme, origin.netloc):
+            foreign.append(request.url)
+
+    page.context.on("request", inspect_origin)
     _compare_sponsored_runs(page, url)
-    _sponsored_fixture_failures(page, url)
+    _sponsored_module_failures(page, url, service)
+    _checkout_and_dismissal(page, url)
     # Switching mode must hide a visible Sample placement before Live starts.
     page.context.clear_cookies()
     page.goto(url + "/?ads=mock")
@@ -513,7 +609,8 @@ def sponsored_mock_flow(page, url, service):
     with patch.object(service.catalog["live"], "search_batch", return_value=([], None)):
         assert action(page, "source").ok
     expect(slot).to_be_hidden()
-    print("PASS sponsored separation, fixture failure isolation and Live gating")
+    assert not foreign, foreign
+    print("PASS sponsored separation, controls, dismissal, checkout, Live gating and module failures")
 
 
 if __name__ == "__main__":

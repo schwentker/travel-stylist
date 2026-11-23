@@ -44,6 +44,6 @@ Open [localhost:8000](http://127.0.0.1:8000). FastAPI serves the browser app and
 
 ## Ad placement mock
 
-[Open the Sample demo with mock placements](https://sandboxlabs.ai/travel-stylist/?ads=mock). Choose Sample, send the trip brief, then source jackets to see a fictional travel offer followed by a poll. The placement uses local sample data so you can compare the same jacket shortlist and inspect the same seller evidence with the flag on or off. No advertiser receives the trip details or poll vote.
+[Open the Sample demo with mock placements](https://sandboxlabs.ai/travel-stylist/?ads=mock). Choose Sample, send the trip brief, then source jackets to see a fictional travel offer followed by a poll. This local simulation tests whether a trip-shopping assistant can show contextual sponsorship while the buyer’s return policy still determines which jacket wins. Save the no-final-sale rule and reopen the trip to see why Birch replaces Alder. The placement uses fictional data and keeps the poll vote in the browser.
 
 Not affiliated with or endorsed by Koah.
