@@ -14,7 +14,7 @@ Live mode searches Shopify on demand. One search considers up to 40 product grou
 
 The web app loads the repository-root `.env` at startup. Exported environment variables take precedence. Set `SENSO_API_KEY` for live preference recall and `TYPESAFE_API_KEY` (or `JEV_API_KEY`) for live formality and returnability judgments. `SHOPIFY_CATALOG_TOKEN` is optional. Restart Uvicorn after editing `.env`. Ollama uses the loopback service with a four-second intent deadline. Guided input works without it. Senso search is scoped to a buyer/mode/artifact binding. To provision the four authored fictional reference documents into a configured Senso organization, use `python -m commerce.documents --buyer <opaque-demo-binding>`. Official live terms stay transient.
 
-Run `python -m unittest discover -s commerce/tests -v` for T01–T08 and `python -m commerce.contracts.verify` for the API freeze. The browser contract and complete examples are in `contracts/v1/`. The Gemini assignment and phase receipts are in `handoff/`.
+Run `python -m unittest discover -s commerce/tests -v` for T01–T08 and `python -m commerce.contracts.verify` for the API freeze. The browser contract and complete examples are in `contracts/v1/`.
 
 ### Signed seller clarification probe
 

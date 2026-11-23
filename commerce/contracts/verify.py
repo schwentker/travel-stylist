@@ -1,7 +1,5 @@
 """Run with python -m commerce.contracts.verify from the repository root."""
-import hashlib
 import json
-import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -50,19 +48,9 @@ def validate_view(view):
 def main():
     schema = (BASE / "openapi.json").read_bytes()
     assert app.openapi() == json.loads(schema), "Frozen OpenAPI differs from the application"
-    packet = (BASE.parents[1] / "handoff/gui-packet.md").read_text()
-    assert hashlib.sha256(schema).hexdigest() in packet
-    embedded = re.search(r"```json\n(.+?)\n```", packet, re.S)
-    assert json.loads(embedded[1]) == json.loads(schema)
     fixtures = {p.stem: json.loads(p.read_text()) for p in (BASE / "examples").glob("*.json")}
     expected = {"new","before","indexing","fresh-after","no-winner","ready","changed","unavailable","sample","api-error"}
     assert set(fixtures) == expected
-    plan = BASE.parents[2] / "commerce-plan"
-    if plan.is_dir():
-        assert fixtures["fresh-after"] == json.loads((plan / "05-sample-response.json").read_text())
-        originals = json.loads((plan / "08-wire-examples.json").read_text())
-        for label in ("ready", "changed", "unavailable", "sample", "error"):
-            assert originals[label] == fixtures["api-error" if label == "error" else label]
     for name, raw in fixtures.items():
         if name == "api-error":
             assert ApiError.model_validate(raw).error.code == "STALE_SHORTLIST"
@@ -98,7 +86,7 @@ def main():
     for o in (a,b,c):
         ids = next(check for check in o["checks"] if check["id"] == "returns")["evidenceIds"]
         assert rule in ids and any(e["kind"] == "sample_policy" and e["id"] in ids and e["variantId"] == o["variantId"] for e in after["evidence"])
-    print("PASS: frozen OpenAPI, packet schema, 10 synthetic envelopes, board continuity, buyer rule and seller evidence.")
+    print("PASS: frozen OpenAPI, 10 synthetic envelopes, board continuity, buyer rule and seller evidence.")
 
 
 if __name__ == "__main__":
