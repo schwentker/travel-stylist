@@ -381,7 +381,8 @@ def _check_unit(page, slot, expected_format):
     expect(unit.locator(".sponsored-label")).to_have_text("Sponsored")
     caption = unit.locator(".sponsored-caption")
     expect(caption).to_be_visible()
-    expect(caption).to_contain_text("Not affiliated with or endorsed by Koah")
+    expect(caption).to_contain_text("Fictional advertiser")
+    assert "koah" not in unit.inner_text().lower()
     expect(unit.locator(".sponsored-hide")).to_be_visible()
     assert slot.evaluate("""el => el.previousElementSibling?.id === "transcript"
         && el.nextElementSibling?.id === "message-form"
@@ -461,7 +462,7 @@ def _compare_sponsored_runs(page, url):
     from uuid import UUID
 
     results = []
-    for flag in ("", "?ads=mock"):
+    for ads_on in (False, True):
         # Real trips and shortlists get new UUIDs. Give each run the same clean DB
         # and ID sequence so the comparison can retain every field except requestId.
         workflow = Workflow(":memory:")
@@ -481,24 +482,29 @@ def _compare_sponsored_runs(page, url):
                 requests.append((request.method, target.path, target.query, body))
 
         page.on("request", capture)
+        # The ad layer is always on, so the baseline run blocks its modules.
+        block = lambda route: route.abort()
+        if not ads_on:
+            page.route("**/sponsored*.js", block)
         try:
             with (
                 patch.object(app.state, "workflow", workflow),
                 patch("commerce.workflow.uuid4", side_effect=lambda: UUID(int=next(serial))),
                 patch.object(workflow, "language", return_value=None),
             ):
-                states = _placement_journey(page, url + "/" + flag, show_units=bool(flag))
-                if flag:
-                    assert {"sponsored.js", "sponsored-ads.js"} <= set(modules), modules
-                else:
-                    assert not modules, modules
+                states = _placement_journey(page, url + "/", show_units=ads_on)
+                assert {"sponsored.js"} <= set(modules), modules
+                if ads_on:
+                    assert {"sponsored-ads.js"} <= set(modules), modules
                 assert len(requests) == len(states), requests
                 results.append((states, requests))
         finally:
             page.remove_listener("request", capture)
+            if not ads_on:
+                page.unroute("**/sponsored*.js", block)
             if workflow.db is not None:
                 workflow.db.close()
-    assert results[0] == results[1], ("flag changed decisions, transcript or API traffic", results)
+    assert results[0] == results[1], ("ad layer changed decisions, transcript or API traffic", results)
 
 
 def _sponsored_module_failures(page, url, service):
@@ -531,7 +537,7 @@ def _sponsored_module_failures(page, url, service):
 
             page.route(pattern, fail_module)
             try:
-                sample_flow(page, url + "/?ads=mock", service)
+                sample_flow(page, url + "/", service)
                 expect(page.locator("#sponsored-slot")).to_have_count(1)
                 expect(page.locator("#sponsored-slot")).to_be_hidden()
                 assert not page.evaluate("window.sponsoredSlotExposed"), "slot became visible"
@@ -545,7 +551,7 @@ def _sponsored_module_failures(page, url, service):
 
 def _checkout_and_dismissal(page, url):
     page.context.clear_cookies()
-    begin(page, url + "/?ads=mock", "sample")
+    begin(page, url + "/", "sample")
     slot = page.locator("#sponsored-slot")
     expect(slot.locator(".sponsored-unit")).to_have_attribute("data-format", "poll")
     # A question about an existing jacket retains the shortlist and allows checkout.
@@ -589,9 +595,12 @@ def sponsored_mock_flow(page, url, service):
     _compare_sponsored_runs(page, url)
     _sponsored_module_failures(page, url, service)
     _checkout_and_dismissal(page, url)
-    # Switching mode must hide a visible Sample placement before Live starts.
+    # The placement is mode independent. A mode change keeps a visible unit and a new
+    # session clears it. The Live notice follows the selector.
     page.context.clear_cookies()
-    page.goto(url + "/?ads=mock")
+    page.goto(url + "/")
+    note = page.locator("#live-note")
+    expect(note).to_be_hidden()
     page.locator("#mode").select_option("sample")
     assert action(page, "start").ok
     page.locator("#example").press("Enter")
@@ -599,18 +608,21 @@ def sponsored_mock_flow(page, url, service):
     slot = page.locator("#sponsored-slot")
     expect(slot).to_be_visible()
     page.locator("#mode").select_option("live")
-    expect(slot).to_be_hidden()
+    expect(slot).to_be_visible()
+    expect(note).to_be_visible()
+    expect(note).to_contain_text("real")
     assert action(page, "start").ok
     expect(slot).to_be_hidden()
+    expect(note).to_be_visible()
     with patch.object(service, "language", return_value=None):
         page.locator("#example").press("Enter")
         assert action(page, "send").ok
-    expect(slot).to_be_hidden()
-    with patch.object(service.catalog["live"], "search_batch", return_value=([], None)):
-        assert action(page, "source").ok
-    expect(slot).to_be_hidden()
+    expect(slot.locator(".sponsored-unit")).to_have_attribute("data-format", "action-card")
+    expect(slot).to_be_visible()
+    page.locator("#mode").select_option("sample")
+    expect(note).to_be_hidden()
     assert not foreign, foreign
-    print("PASS sponsored separation, controls, dismissal, checkout, Live gating and module failures")
+    print("PASS sponsored separation, controls, dismissal, checkout, mode independence, Live notice and module failures")
 
 
 if __name__ == "__main__":

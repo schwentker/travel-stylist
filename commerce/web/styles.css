@@ -37,6 +37,7 @@ button.primary:hover:not(:disabled), .merchant-link:hover { border-color: var(--
 :focus-visible { outline: 3px solid #126b80; outline-offset: 3px; }
 .text-button { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: .18em; color: var(--accent-dark); }
 .quiet { color: var(--muted); font-size: .87rem; }
+.live-note { color: var(--muted); font-size: .87rem; margin: 0 0 .6rem; }
 .masthead, main { padding-inline: max(1rem, calc((100vw - 1480px) / 2)); }
 .masthead {
   min-height: 70px;
