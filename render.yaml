@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: travel-stylist
+    runtime: docker
+    plan: free
+    dockerfilePath: ./commerce/Dockerfile
+    dockerContext: ./commerce
+    healthCheckPath: /
+    envVars:
+      - key: COMMERCE_DB
+        value: /tmp/travel-stylist.sqlite3
