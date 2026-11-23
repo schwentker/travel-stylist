@@ -1,0 +1,45 @@
+// Fixture ads for the in-chat placement mock (?ads=mock, Sample mode only).
+// All advertisers are fictional. Domains use the reserved .example TLD (RFC 2606).
+// Copy limits: title <= 60, body <= 90, cta <= 16, poll question <= 60.
+export default [
+  {
+    id: "esim-multi",
+    format: "action-card",
+    turn: "brief",
+    priority: 10,
+    sponsor: "SaffronPass",
+    domain: "saffronpass.example",
+    keywords: ["delhi", "istanbul", "barcelona", "roaming", "data plan"],
+    match: { minCities: 2 },
+    title: "SaffronPass eSIM: one plan for India, Türkiye and Spain",
+    body: "Data in all three countries on your {month} trip. Activate before you fly.",
+    cta: "See plans",
+    why: "destinations ({cities})",
+  },
+  {
+    id: "steamer-formal",
+    format: "action-card",
+    turn: "brief",
+    priority: 5,
+    sponsor: "Kiteway",
+    domain: "kiteway.example",
+    keywords: ["black tie", "steamer", "wrinkle"],
+    match: { dressKeywords: ["formal"] },
+    title: "Kiteway mini steamer for formal evenings",
+    body: "Packs flat. Crease-free jackets after a long flight.",
+    cta: "See steamer",
+    why: "formal events on your itinerary",
+  },
+  {
+    id: "carry-on-poll",
+    format: "poll",
+    turn: "shortlist",
+    priority: 10,
+    sponsor: "Kiteway",
+    domain: "kiteway.example",
+    match: { minCities: 2 },
+    question: "Packing carry-on only for all three cities?",
+    options: ["Yes", "No", "Not sure"],
+    why: "a multi-city itinerary ({cities}). No product shown while you compare jackets",
+  },
+];

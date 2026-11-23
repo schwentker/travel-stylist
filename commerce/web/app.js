@@ -12,6 +12,47 @@ let selection = null;
 let busy = false;
 let generation = 0;
 let stale = false;
+let ads = null;
+let pendingAdContext = null;
+
+if (new URLSearchParams(location.search).get("ads") === "mock") {
+  import("./sponsored.js")
+    .then(module => {
+      module.initSponsored(get("sponsored-slot"));
+      ads = module;
+      if (pendingAdContext) notifyAds(loaded => loaded.onTurn(pendingAdContext));
+    })
+    .catch(error => console.warn("[sponsored-mock]", error));
+}
+
+function adContext(payload, next, type) {
+  const brief = next.brief ? Object.freeze({
+    month: next.brief.month,
+    cities: Object.freeze(next.brief.cities.map(city => city.name)),
+    dress: Object.freeze(next.brief.cities.flatMap(city => city.events.map(event => event.dress))),
+  }) : null;
+  return Object.freeze({
+    action: type === "handoff" ? "handoff" : payload.action ?? null,
+    sessionId: next.sessionId,
+    requestId: payload.requestId ?? null,
+    mode: next.mode,
+    question: payload.action === "message" ? payload.text : null,
+    answer: typeof next.reply === "string" ? next.reply : "",
+    brief,
+  });
+}
+
+function notifyAds(call, context = null) {
+  if (!ads) {
+    pendingAdContext = context;
+    return;
+  }
+  try {
+    call(ads);
+  } catch (error) {
+    console.warn("[sponsored-mock]", error);
+  }
+}
 
 function element(tag, content, className) {
   const node = document.createElement(tag);
@@ -371,12 +412,15 @@ async function run(path, payload, type) {
       throw new Error("The service returned a mismatched response.");
     }
     if (starting) get("transcript").replaceChildren();
+    if (starting) notifyAds(module => module.reset(), null);
     if (payload.action === "message") {
       logMessage("You", payload.text);
       if (draft.value.trim() === payload.text) draft.value = "";
     }
     apply(next, type === "handoff" && Boolean(payload.override));
     logMessage("Stylist", next.reply);
+    const context = adContext(payload, next, type);
+    notifyAds(module => module.onTurn(context), context);
     notice("");
     if (type === "handoff") {
       const winnerId = next.shortlist?.winnerId;
