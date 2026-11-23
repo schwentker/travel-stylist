@@ -21,7 +21,7 @@ This demo uses fictional sellers and works without provider keys. It shows why a
 | [Shopify Universal Commerce Protocol (UCP)](https://shopify.dev/docs/agents/catalog/global-catalog) | Live mode calls Shopify’s Global Catalog MCP endpoint with `search_catalog` and `get_product`. It verifies the seller and exact variant, then rechecks price and eligibility before surfacing an attributed merchant checkout link. If the quote changes, the buyer must confirm again. |
 | [Senso](https://docs.senso.ai/docs/concepts) | The live adapter scopes preference retrieval to the buyer and document. The sample demonstrates the same save-and-recall flow with local fixtures. |
 | [TypeSafe Jev](https://docs.typesafe.ai/primitives/choice) | The live adapter checks whether a source is sufficient and returns a typed verdict on ambiguous requirements. The interface links the verdict to its source and exposes uncertainty. |
-| [Personal Agent Protocol / Poppy](https://personalagentprotocol.org/docs/1.0/spec) | Deferred. The [design](commerce-plan/01-master-plan.md#m3-who-does-what) outlines where a seller agent could clarify an ambiguous policy and return an attributed reply. |
+| [Personal Agent Protocol / Poppy](https://personalagentprotocol.org/docs/1.0/spec) | Deferred. A seller agent could clarify an ambiguous policy and return an attributed reply. |
 
 **Verified live:** Three successive batches from a Shopify search for the default trip returned nine in-stock jackets in USD, all in 40R or 40 Regular, with attributed seller checkout links for the exact variants. **Verified in the sample:** cross-conversation recall, the Alder-to-Birch change, and the evidence UI. Checkout state transitions were tested with fixtures. Live Senso and Jev verification requires provider keys, and real merchant checkout remains unverified. [Phase Q verification and judge demo claims](commerce/handoff/phase-q-receipt.md)
 
@@ -40,7 +40,7 @@ For Live mode, place `SENSO_API_KEY` and `TYPESAFE_API_KEY` in a `.env` file at 
 
 Open [localhost:8000](http://127.0.0.1:8000). FastAPI serves the browser app and API from the same origin. SQLite persists the trip brief and buyer preferences. Live offers and checkout URLs are held in short-lived task memory.
 
-[Backend and live-mode setup](commerce/README.md) · [Frozen API v1](commerce/contracts/v1/openapi.json) · [Acceptance cases](commerce-plan/02-contract-and-cases.md) · [Project plan](commerce-plan/01-master-plan.md)
+[Backend and live-mode setup](commerce/README.md) · [Frozen API v1](commerce/contracts/v1/openapi.json)
 
 ## Ad placement mock
 
