@@ -9,6 +9,8 @@
     { "pattern": "sandboxlabs.ai/travel-stylist/", "zone_name": "sandboxlabs.ai" },
     { "pattern": "sandboxlabs.ai/travel-stylist/styles.css", "zone_name": "sandboxlabs.ai" },
     { "pattern": "sandboxlabs.ai/travel-stylist/app.js", "zone_name": "sandboxlabs.ai" },
+    { "pattern": "sandboxlabs.ai/travel-stylist/sponsored.js", "zone_name": "sandboxlabs.ai" },
+    { "pattern": "sandboxlabs.ai/travel-stylist/sponsored-ads.js", "zone_name": "sandboxlabs.ai" },
     { "pattern": "sandboxlabs.ai/travel-stylist/api/*", "zone_name": "sandboxlabs.ai" }
   ],
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
