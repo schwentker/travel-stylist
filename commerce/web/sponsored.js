@@ -16,8 +16,7 @@ let epoch = 0;
 let session = null;
 const seen = new Set();
 
-const modeIsSample = () => document.getElementById("mode")?.value === "sample";
-const enabled = () => flagOn && modeIsSample() && !!slot;
+const enabled = () => flagOn && !!slot;
 
 function node(tag, className, text) {
   const el = document.createElement(tag);
@@ -141,9 +140,6 @@ function render(ad, ctx) {
 
 export function initSponsored(slotEl) {
   slot = slotEl;
-  document.getElementById("mode")?.addEventListener("change", () => {
-    if (!modeIsSample()) clear();
-  });
 }
 
 export function reset() {
@@ -156,7 +152,7 @@ export function reset() {
 
 export function onTurn(ctx) {
   try {
-    if (!enabled() || ctx.mode !== "sample") return clear();
+    if (!enabled()) return clear();
     if (session && ctx.sessionId !== session) return;
     session = ctx.sessionId;
     if (ctx.action === "handoff") {
@@ -170,7 +166,7 @@ export function onTurn(ctx) {
     seen.add(key);
     const started = epoch;
     const ad = pick(turn, ctx);
-    if (started !== epoch || !modeIsSample()) return;
+    if (started !== epoch) return;
     if (ad) render(ad, ctx);
     else clear();
   } catch (error) {

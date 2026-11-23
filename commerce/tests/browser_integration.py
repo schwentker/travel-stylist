@@ -589,9 +589,12 @@ def sponsored_mock_flow(page, url, service):
     _compare_sponsored_runs(page, url)
     _sponsored_module_failures(page, url, service)
     _checkout_and_dismissal(page, url)
-    # Switching mode must hide a visible Sample placement before Live starts.
+    # The placement is mode independent. A mode change keeps a visible unit and a new
+    # session clears it. The Live notice follows the selector.
     page.context.clear_cookies()
     page.goto(url + "/?ads=mock")
+    note = page.locator("#live-note")
+    expect(note).to_be_hidden()
     page.locator("#mode").select_option("sample")
     assert action(page, "start").ok
     page.locator("#example").press("Enter")
@@ -599,18 +602,21 @@ def sponsored_mock_flow(page, url, service):
     slot = page.locator("#sponsored-slot")
     expect(slot).to_be_visible()
     page.locator("#mode").select_option("live")
-    expect(slot).to_be_hidden()
+    expect(slot).to_be_visible()
+    expect(note).to_be_visible()
+    expect(note).to_contain_text("real")
     assert action(page, "start").ok
     expect(slot).to_be_hidden()
+    expect(note).to_be_visible()
     with patch.object(service, "language", return_value=None):
         page.locator("#example").press("Enter")
         assert action(page, "send").ok
-    expect(slot).to_be_hidden()
-    with patch.object(service.catalog["live"], "search_batch", return_value=([], None)):
-        assert action(page, "source").ok
-    expect(slot).to_be_hidden()
+    expect(slot.locator(".sponsored-unit")).to_have_attribute("data-format", "action-card")
+    expect(slot).to_be_visible()
+    page.locator("#mode").select_option("sample")
+    expect(note).to_be_hidden()
     assert not foreign, foreign
-    print("PASS sponsored separation, controls, dismissal, checkout, Live gating and module failures")
+    print("PASS sponsored separation, controls, dismissal, checkout, mode independence, Live notice and module failures")
 
 
 if __name__ == "__main__":

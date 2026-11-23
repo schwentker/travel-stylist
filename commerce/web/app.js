@@ -149,6 +149,7 @@ function mayOverride(offer) {
 
 function updateControls() {
   for (const id of ["start", "mode"]) get(id).disabled = busy;
+  get("live-note").hidden = mode.value !== "live";
   get("reopen").hidden = !view;
   const active = !!view && !busy && mode.value === view.mode;
   get("reopen").disabled = !active;
